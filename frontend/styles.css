@@ -1,0 +1,140 @@
+/* ============================================================
+   AWS Discovery Orchestrator — Styles
+   ============================================================ */
+
+/* Theme transition */
+.theme-transitioning,
+.theme-transitioning * {
+  transition: background-color 0.3s, border-color 0.3s, color 0.3s !important;
+}
+
+/* Pulse ring animation */
+.pulse-ring {
+  animation: pulse-ring 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-ring {
+  0%, 100% { opacity: 0; transform: scale(0.9); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
+/* Waveform bars */
+.waveform {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+}
+
+.waveform-bar {
+  width: 3px;
+  height: 6px;
+  border-radius: 2px;
+  background: #94a3b8;
+  transition: height 0.15s ease;
+}
+
+.waveform.active .waveform-bar.agent {
+  background: #EC7211;
+  animation: waveform-bounce 0.6s ease infinite alternate;
+}
+
+.waveform.active .waveform-bar.user {
+  background: #3b82f6;
+  animation: waveform-bounce 0.6s ease infinite alternate;
+}
+
+.waveform-bar:nth-child(1) { animation-delay: 0s; }
+.waveform-bar:nth-child(2) { animation-delay: 0.1s; }
+.waveform-bar:nth-child(3) { animation-delay: 0.2s; }
+.waveform-bar:nth-child(4) { animation-delay: 0.3s; }
+.waveform-bar:nth-child(5) { animation-delay: 0.2s; }
+.waveform-bar:nth-child(6) { animation-delay: 0.1s; }
+.waveform-bar:nth-child(7) { animation-delay: 0s; }
+
+@keyframes waveform-bounce {
+  0% { height: 6px; }
+  100% { height: 22px; }
+}
+
+/* Transcript line styling */
+.transcript-line {
+  padding: 4px 0;
+}
+
+.transcript-agent {
+  color: #EC7211;
+}
+
+.transcript-user {
+  color: #3b82f6;
+}
+
+.dark .transcript-agent {
+  color: #FF9900;
+}
+
+.dark .transcript-user {
+  color: #60a5fa;
+}
+
+.transcript-text {
+  color: #475569;
+}
+
+.dark .transcript-text {
+  color: #cbd5e1;
+}
+
+/* Complexity badges */
+.complexity-low {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.complexity-medium {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.complexity-high {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.dark .complexity-low {
+  background: #052e16;
+  color: #86efac;
+}
+
+.dark .complexity-medium {
+  background: #451a03;
+  color: #fde047;
+}
+
+.dark .complexity-high {
+  background: #450a0a;
+  color: #fca5a5;
+}
+
+/* Error/success status text */
+.error {
+  color: #dc2626;
+}
+
+.success {
+  color: #16a34a;
+}
+
+.dark .error {
+  color: #f87171;
+}
+
+.dark .success {
+  color: #4ade80;
+}
+
+/* Smooth scrolling for transcript */
+#transcriptBody {
+  scroll-behavior: smooth;
+}
