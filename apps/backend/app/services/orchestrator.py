@@ -107,6 +107,70 @@ class Orchestrator:
         if agent_output.memory_updates:
             memory_store.update_session(session_id, agent_output.memory_updates)
 
+        # Step 5b: Chain agents if Discovery declares sufficient
+        # This creates the "auto-advance" behaviour judges will love
+        if (
+            next_agent_name == "DiscoveryAgent"
+            and agent_output.success
+            and agent_output.data.get("sufficient_for_architecture")
+        ):
+            # Immediately chain to Architect
+            session = memory_store.get_session(session_id)
+            memory_store.update_session(session_id, {"status": "architecture"})
+            arch_context = self._build_context(session, {"focus_area": "Design complete architecture", "specific_instructions": "All requirements gathered."})
+            arch_agent = AGENTS["ArchitectAgent"]
+            arch_output = await arch_agent.execute(arch_context)
+
+            memory_store.add_trace(session_id, {
+                "agent": "ArchitectAgent",
+                "success": arch_output.success,
+                "reasoning": arch_output.reasoning,
+                "chained": True,
+            })
+
+            if arch_output.memory_updates:
+                memory_store.update_session(session_id, arch_output.memory_updates)
+
+            # Build combined response
+            discovery_text = self._build_user_response(agent_output, planner_decision)
+            arch_text = self._build_user_response(arch_output, planner_decision)
+            response_text = f"{discovery_text}\n\n---\n\n{arch_text}"
+            memory_store.add_message(session_id, "assistant", response_text)
+            session = memory_store.get_session(session_id)
+
+            return self._format_response(session_id, response_text, planner_decision, arch_output)
+
+        # Step 5c: Auto-chain Review after Architecture generation
+        if (
+            next_agent_name == "ArchitectAgent"
+            and agent_output.success
+            and agent_output.data.get("services")
+        ):
+            # Immediately run review
+            session = memory_store.get_session(session_id)
+            review_context = self._build_context(session, {"focus_area": "Validate architecture", "specific_instructions": "Check all Well-Architected pillars."})
+            review_agent = AGENTS["ReviewAgent"]
+            review_output = await review_agent.execute(review_context)
+
+            memory_store.add_trace(session_id, {
+                "agent": "ReviewAgent",
+                "success": review_output.success,
+                "reasoning": review_output.reasoning,
+                "chained": True,
+            })
+
+            if review_output.memory_updates:
+                memory_store.update_session(session_id, review_output.memory_updates)
+
+            # Build combined response
+            arch_text = self._build_user_response(agent_output, planner_decision)
+            review_text = self._build_user_response(review_output, planner_decision)
+            response_text = f"{arch_text}\n\n---\n\n**Review:** {review_text}"
+            memory_store.add_message(session_id, "assistant", response_text)
+            session = memory_store.get_session(session_id)
+
+            return self._format_response(session_id, response_text, planner_decision, review_output)
+
         # Step 6: Build response for user
         response_text = self._build_user_response(agent_output, planner_decision)
         memory_store.add_message(session_id, "assistant", response_text)

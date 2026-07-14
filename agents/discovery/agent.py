@@ -45,6 +45,19 @@ class DiscoveryAgent(BaseAgent):
             ]
             memory_updates["known_facts"] = new_facts
 
+            # Also populate business/technical requirements from facts
+            biz_reqs = list(context.memory.get("business_requirements", []))
+            tech_reqs = list(context.memory.get("technical_requirements", []))
+            for f in facts_extracted:
+                cat = f.get("category", "")
+                fact_text = f.get("fact", "")
+                if cat == "business" and fact_text not in biz_reqs:
+                    biz_reqs.append(fact_text)
+                elif cat in ("technical", "operations") and fact_text not in tech_reqs:
+                    tech_reqs.append(fact_text)
+            memory_updates["business_requirements"] = biz_reqs
+            memory_updates["technical_requirements"] = tech_reqs
+
         # Update remaining questions
         questions = result.get("questions", [])
         if questions:
