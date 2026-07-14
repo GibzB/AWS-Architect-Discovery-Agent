@@ -1,113 +1,150 @@
-# AWS Discovery Orchestrator
+# Atlas — AI Solutions Architect
 
-An AI-powered conversational engine that runs AWS architecture discovery
-workshops — replacing weeks of manual pre-sales work with a guided, multi-agent
-voice dialogue that produces a professional discovery report.
+> An autonomous AI Solutions Architect that conducts enterprise cloud discovery
+> workshops through natural voice and chat conversations, producing
+> implementation-ready deliverables.
 
-Powered by **Amazon Bedrock AgentCore Runtime** + **Amazon Nova 2 Sonic** (bidirectional voice)
-+ **Amazon Nova Pro** (report generation).
+Atlas replaces weeks of manual pre-sales consulting with a guided, multi-agent
+voice dialogue that behaves like a Principal Solutions Architect from AWS
+Professional Services.
 
-## How It Works
+## What Makes Atlas Agentic
 
-1. Customer opens the web UI and starts a voice session.
-2. Nova 2 Sonic conducts a real-time voice conversation guided by the Orchestrator prompt.
-3. The discovery interview covers: business context, technical workloads, compliance, and growth.
-4. On hangup, Nova Pro generates a structured discovery report (architecture recommendations, service breakdown, next steps).
-5. The report is stored in DynamoDB and presented in the UI.
+Atlas is **not a chatbot**. It is an autonomous reasoning system that:
+
+- **Drives the conversation** — decides what to ask, not just responds
+- **Plans dynamically** — no hardcoded questionnaire; adapts to each customer
+- **Coordinates specialists** — routes work to Discovery, Architect, and Review agents
+- **Reflects on its own work** — Review Agent can reject and force revision
+- **Produces deliverables** — architecture diagrams, Terraform, reports
+
+### Autonomous Loop
+
+```
+Observe → Reason → Plan → Select Agent → Invoke Tools → Evaluate → Reflect → Repeat
+```
+
+The loop continues until customer objectives are satisfied and the Review Agent
+approves the architecture.
 
 ## Architecture
 
-Fully serverless — zero cost when idle.
-
 ```
-Browser (WebSocket) ──► FastAPI / AgentCore Runtime ──► Nova 2 Sonic (bidirectional voice)
-                                    │
-                                    └──► Nova Pro (report generation)
-                                    │
-                                    └──► DynamoDB (session + report storage)
-                                    │
-                                    └──► Bedrock Knowledge Base (RAG - Well-Architected, Landing Zones)
+Customer
+    │
+    ▼
+┌─────────┐     ┌─────────┐     ┌───────────────┐
+│  Atlas  │────▶│ Planner │────▶│ Tool Registry │
+│  (Conv) │     │ (Brain) │     └───────┬───────┘
+└─────────┘     └─────────┘             │
+                                        ▼
+                    ┌───────────────────────────────────┐
+                    │                                   │
+              ┌─────▼─────┐  ┌──────▼──────┐  ┌───────▼───────┐
+              │ Discovery  │  │  Architect  │  │    Review     │
+              │   Agent    │  │    Agent    │  │    Agent      │
+              └────────────┘  └─────────────┘  └───────────────┘
+                                        │
+                                        ▼
+                              ┌────────────────────┐
+                              │    Deliverables    │
+                              │  • Report (MD)     │
+                              │  • Diagram         │
+                              │  • Terraform       │
+                              │  • JSON Output     │
+                              └────────────────────┘
 ```
 
-| Component | AWS Service |
-|-----------|------------|
-| Voice conversation | Amazon Nova 2 Sonic (`amazon.nova-2-sonic-v1:0`) |
-| Report generation | Amazon Nova Pro (`amazon.nova-pro-v1:0`) |
-| Agent runtime | Amazon Bedrock AgentCore Runtime |
-| RAG knowledge base | Amazon Bedrock Knowledge Base |
-| Session storage | Amazon DynamoDB |
-| Frontend hosting | Amazon S3 + CloudFront |
-| Presign API | API Gateway + Lambda |
-| IaC | AWS CloudFormation |
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React + TypeScript + Tailwind CSS |
+| Backend | FastAPI (Python 3.12) |
+| Voice | Amazon Nova Sonic |
+| AI/LLM | Amazon Nova Pro / Lite |
+| Runtime | Amazon Bedrock AgentCore |
+| Database | Amazon DynamoDB |
+| Storage | Amazon S3 |
+| Auth | Amazon Cognito |
+| IaC | Terraform |
+| CI/CD | GitHub Actions |
+| RAG | Amazon Bedrock Knowledge Base |
 
 ## Project Structure
 
 ```
-aws-discovery-orchestrator/
-├── agent/
-│   ├── server.py            # FastAPI WebSocket server (runs in AgentCore)
-│   ├── nova_sonic.py        # Nova 2 Sonic bidirectional stream client
-│   ├── report.py            # Post-session report generation via Nova Pro
-│   ├── prompts/             # System prompts for the discovery agent
-│   │   ├── orchestrator.py  # Main discovery interview prompt
-│   │   └── report.py        # Report generation prompt
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/
-│   ├── index.html
-│   ├── app.js
-│   └── styles.css
+atlas-discovery/
+├── apps/
+│   ├── backend/          # FastAPI application
+│   └── frontend/         # React + TypeScript UI
+├── packages/
+│   ├── agent_sdk/        # Base agent classes and contracts
+│   ├── shared/           # Shared utilities
+│   ├── prompts/          # System prompts for all agents
+│   └── schemas/          # Pydantic request/response models
+├── agents/
+│   ├── planner/          # Decides what happens next
+│   ├── discovery/        # Asks adaptive questions
+│   ├── architect/        # Designs AWS architecture
+│   └── review/           # Validates and approves/rejects
+├── tools/
+│   ├── rag/              # Knowledge Base search
+│   ├── diagram/          # Mermaid diagram generator
+│   ├── terraform/        # Terraform code generator
+│   └── markdown/         # Report generator
+├── memory/               # Session memory management
 ├── infra/
-│   ├── bootstrap.yaml       # CFN: ECR repository (first-time setup)
-│   └── template.yaml        # CFN: full stack (AgentCore, API GW, CloudFront, DDB)
-├── knowledgebase/           # RAG documents (Well-Architected, Landing Zones)
-│   ├── well_architected/
-│   ├── landing_zones/
-│   └── migration/
-├── deploy.sh                # One-command deploy script
-├── ARCHITECTURE.md
-└── DEPLOYMENT.md
+│   └── terraform/        # AWS infrastructure
+├── docs/
+│   ├── architecture.md   # System architecture
+│   ├── agent-contracts.md # Agent interfaces
+│   └── api.md            # REST/WebSocket API spec
+├── tests/
+├── .github/workflows/    # CI/CD
+├── scripts/
+│   └── bootstrap.sh      # Project setup script
+└── Makefile
 ```
-
-## Prerequisites
-
-- AWS CLI configured with a profile
-- Docker with buildx support (or use `--prebuilt`)
-- `jq` installed
-- Amazon Bedrock model access enabled for Nova 2 Sonic and Nova Pro in your region
 
 ## Quick Start
 
 ```bash
-./deploy.sh --profile <your-aws-profile> --password <demo-password>
+# Clone and setup
+git clone <repo-url>
+cd aws-architect-discovery-agent
+
+# Bootstrap everything
+chmod +x scripts/bootstrap.sh
+./scripts/bootstrap.sh
+
+# Start development
+make backend    # FastAPI on :8000
+make frontend   # React on :5173
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for full instructions.
+## Development Phases
 
-## Local Development
+| Phase | Focus | Status |
+|-------|-------|--------|
+| 1 | Architecture & Contracts | ✅ Complete |
+| 2 | Project Skeleton | ✅ Complete |
+| 3 | Infrastructure (Terraform) | ✅ Complete |
+| 4 | Backend API + Orchestrator | ✅ Complete |
+| 5 | Agent Framework (Planner, Discovery, Architect, Review) | ✅ Complete |
+| 6 | Voice (Nova Sonic) | 🔲 Next |
+| 7 | Frontend | 🔲 |
+| 8 | Testing | 🔲 |
+| 9 | Deployment | 🔲 |
+| 10 | Optimisation | 🔲 |
 
-```bash
-cd agent
-python -m venv .venv && source .venv/bin/activate
-pip install -r requirements-local.txt
-cp .env.example .env  # edit with your values
-uvicorn local_server:app --reload --port 8000
-```
+## Key Design Decisions
 
-Then open `frontend/index.html` in your browser.
-
-## Cost
-
-All services are pay-per-use with no idle cost.
-
-| Service | Pricing |
-|---------|---------|
-| Nova 2 Sonic | Per audio second |
-| Nova Pro (report) | Per token |
-| AgentCore Runtime | Per invocation |
-| DynamoDB | Per request (on-demand) |
-| Bedrock Knowledge Base | Per query |
-| WAF (optional) | ~$7/month flat + $0.60/M requests |
+1. **Planner ≠ Orchestrator** — Planner reasons, Atlas executes. Strict separation.
+2. **Dynamic over static** — No hardcoded question sequences.
+3. **Reflection loop** — Architecture must pass Review Agent before report generation.
+4. **Tool registry** — Agents never call AWS directly; they request tools.
+5. **Persistent memory** — Single session state object, all agents read/write.
 
 ## License
 

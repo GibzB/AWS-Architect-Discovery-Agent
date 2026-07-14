@@ -1,0 +1,1197 @@
+
+
+
+
+Yesterday 7:06 PM
+Today 2:36 PM
+Thanks for the correction—I was indeed conflating it with your earlier Momentum Intelligence project. We'll keep this as a separate project.
+
+I also couldn't retrieve your GitHub repository through search (GitHub indexing appears incomplete), so I can't inspect its contents directly. If you want me to review the codebase itself later, either share the README or attach the repository as a ZIP.
+
+First, I think we're building something much bigger than an "AWS Architect Discovery Agent"
+I think the product is actually:
+
+An AI Solutions Architect that autonomously conducts a cloud discovery workshop and produces implementation-ready deliverables.
+
+That's a much stronger story.
+
+The user isn't chatting with ChatGPT.
+
+They're engaging with a virtual Solutions Architect.
+
+Naming the AI
+I think the project (repository) and the AI persona should have different names.
+
+For example
+
+Project:
+
+AWS Architect Discovery Agent
+
+AI:
+
+"Hello, I'm Atlas. I'll be your AI Solutions Architect today."
+
+This is exactly what companies like Anthropic and OpenAI do.
+
+My favourite names
+1. Atlas ⭐⭐⭐⭐⭐
+Atlas helps you navigate cloud architecture.
+
+Very memorable.
+
+Conversation:
+
+"Hi, I'm Atlas."
+
+Professional.
+
+2. Aria ⭐⭐⭐⭐⭐
+Short.
+
+Friendly.
+
+Feels conversational.
+
+3. Nova ⭐⭐⭐⭐☆
+Since you'll likely use Amazon Nova models, it's thematic—but I'd be careful because "Nova" is already an AWS model family. It may create brand confusion.
+
+4. Sage ⭐⭐⭐⭐⭐
+Extremely fitting.
+
+A Solutions Architect is essentially a sage.
+
+Also subtly aligns with AWS naming without conflicting.
+
+5. Orion ⭐⭐⭐⭐☆
+A navigator.
+
+Great if the AI is helping discover architecture.
+
+6. Aiden
+Friendly.
+
+Enterprise-ready.
+
+7. Helix
+Modern.
+
+Technology-oriented.
+
+8. Echo
+Works well for a conversational AI.
+
+9. Beacon ⭐⭐⭐⭐⭐
+One of my favourites.
+
+The AI illuminates the path forward.
+
+10. Vector
+Architectural.
+
+Engineering feel.
+
+My Top Three
+Atlas
+"Hi, I'm Atlas.
+
+I'll guide you through today's cloud discovery workshop."
+
+This is my favourite.
+
+Sage
+"Hello, I'm Sage.
+
+Let's design the right cloud architecture together."
+
+Very enterprise.
+
+Beacon
+"Hi, I'm Beacon.
+
+I'll help uncover your technical requirements and recommend the best cloud architecture."
+
+Very unique.
+
+I also have an idea I think would make this stand out
+Instead of introducing itself as:
+
+AI Assistant
+
+Introduce itself exactly like an AWS consultant.
+
+Example:
+
+Atlas
+
+Principal AI Solutions Architect
+
+"Welcome to your Cloud Discovery Workshop. My role is to understand your business objectives, identify technical constraints, evaluate risks, and work with my specialist colleagues to produce an implementation-ready architecture."
+
+That immediately changes the user's expectations. They aren't "chatting with AI"; they're participating in a structured consulting engagement.
+
+One more strategic suggestion
+I'd also avoid limiting the branding to AWS in the AI's name.
+
+Even if the implementation is entirely on AWS (Bedrock, AgentCore, Lambda, DynamoDB, S3, etc.), the AI itself could eventually recommend architectures for AWS, Azure, hybrid, or multi-cloud.
+
+Keeping the persona cloud-neutral gives you room to grow while still showcasing AWS as the platform powering the experience.
+
+Personally, if I were pitching this to judges, I'd introduce the agent as Atlas. It's memorable, professional, and perfectly fits the role of an AI that guides customers from uncertainty to a complete cloud architecture through autonomous reasoning and collaboration with specialist agents.
+
+
+
+AWS-Architect-Discovery-Agent-main.zip
+Zip Archive
+Here is the repo attached
+
+Perfect. If we only have hours, then we're no longer optimizing for "perfect architecture." We're optimizing for maximum judging impact.
+
+That changes the strategy completely.
+
+New Goal
+Don't build the biggest system.
+
+Build the smallest system that convincingly demonstrates autonomous agentic behavior.
+
+Remember: judges won't read 20,000 lines of code. They'll spend about 5–10 minutes with your submission.
+
+They need to walk away thinking:
+
+"This feels like an autonomous AI Solutions Architect."
+
+The MVP We Should Build
+Instead of eight agents, let's build four really well.
+
+                Atlas
+         (Customer-facing)
+
+                 │
+         Planner Agent
+     (Reasoning & Planning)
+
+      ┌──────────┴──────────┐
+      ▼                     ▼
+Discovery Agent      Architect Agent
+
+              ▼
+        Review Agent
+That's enough to demonstrate:
+
+Multi-agent collaboration
+
+Dynamic planning
+
+Reflection
+
+Tool usage
+
+Cut Features Ruthlessly
+Keep
+✅ Voice with Nova Sonic
+
+✅ Chat UI
+
+✅ Planner
+
+✅ Discovery Agent
+
+✅ Architect Agent
+
+✅ Review Agent
+
+✅ Memory
+
+✅ Report generation
+
+✅ Architecture diagram
+
+✅ Terraform generation (basic)
+
+✅ RAG over AWS Well-Architected docs
+
+Cut (for hackathon)
+❌ Cost optimization agent
+
+❌ Security specialist agent (merge into Review)
+
+❌ EventBridge complexity
+
+❌ CloudFormation generation
+
+❌ Complex async workflows
+
+❌ Multiple databases
+
+❌ Fancy analytics dashboards
+
+Simplified AWS Architecture
+React + Tailwind
+
+        │
+        ▼
+API Gateway (WebSocket/HTTP)
+
+        │
+        ▼
+FastAPI
+
+        │
+        ▼
+Bedrock Agent Runtime
+
+        │
+        ▼
+Planner
+
+        │
+        ▼
+Tool Registry
+
+        │
+        ▼
+Discovery
+Architect
+Review
+
+        │
+        ▼
+DynamoDB
+
+        │
+        ▼
+S3 Reports
+Notice what's missing?
+
+No Step Functions initially.
+
+No EventBridge initially.
+
+Those can be future enhancements.
+
+Build Order (Aggressive)
+Phase 1 (30–45 min)
+Repository cleanup.
+
+Project structure.
+
+Terraform skeleton.
+
+CI.
+
+Done.
+
+Phase 2 (1–2 hours)
+React UI
+
+Chat
+
+Voice button
+
+Streaming responses
+
+Session panel
+
+Nothing fancy.
+
+Phase 3 (2 hours)
+FastAPI
+
+Endpoints
+
+POST /session
+
+POST /message
+
+GET /report
+
+GET /diagram
+Phase 4 (2 hours)
+Planner
+
+This is where the intelligence lives.
+
+Example:
+
+Need networking
+
+↓
+
+Discovery Agent
+
+↓
+
+Need database info
+
+↓
+
+Discovery Agent
+
+↓
+
+Enough information
+
+↓
+
+Architect Agent
+
+↓
+
+Review
+
+↓
+
+Report
+This is the feature judges will remember.
+
+Phase 5 (2 hours)
+Discovery Agent
+
+Needs to ask intelligent follow-up questions.
+
+Not a static questionnaire.
+
+Example:
+
+Customer:
+
+"Healthcare startup"
+
+Planner:
+
+Need HIPAA.
+
+Discovery asks:
+
+"Will you store Protected Health Information?"
+
+That's agentic.
+
+Phase 6 (2 hours)
+Architect Agent
+
+Produces:
+
+AWS services
+
+Architecture decisions
+
+Mermaid diagram
+
+Phase 7 (1 hour)
+Review Agent
+
+Checks:
+
+High Availability
+
+Security
+
+Networking
+
+Missing Requirements
+If something is wrong:
+
+Reject
+
+↓
+
+Planner
+
+↓
+
+Architect revises
+That single loop demonstrates reflection.
+
+Phase 8 (1 hour)
+Markdown report.
+
+PDF optional if time allows.
+
+Biggest Change I'd Make
+Don't make Atlas an LLM prompt.
+
+Make Atlas a state machine.
+
+Example:
+
+START
+
+↓
+
+Need Discovery?
+
+↓
+
+Need Architecture?
+
+↓
+
+Need Review?
+
+↓
+
+Need Report?
+
+↓
+
+Complete
+The LLM reasons within each state, but the workflow itself is deterministic and inspectable. That makes the system easier to debug and easier to explain to judges.
+
+What Wins the Demo
+Imagine this sequence:
+
+User: "We're a fintech startup expanding into Europe."
+
+Atlas:
+
+"To recommend an architecture, I need to understand your compliance, expected traffic, authentication model, and recovery objectives."
+
+After a few answers:
+
+"You've mentioned PCI DSS requirements but haven't described your disaster recovery objectives. Before I continue, I need that information."
+
+That's planning.
+
+Then:
+
+"I've generated an initial architecture."
+
+Review Agent:
+
+"The proposed design doesn't satisfy the requested RTO of one hour because it's deployed in a single region."
+
+Planner:
+
+"Architect, revise the design to include multi-region failover."
+
+Architect updates the design.
+
+Review approves it.
+
+Final report is generated.
+
+That 30-second interaction demonstrates reasoning, planning, decision-making, reflection, and action better than dozens of slides.
+
+My Recommendation
+Given the time constraints, I'd change our mindset from:
+
+"Let's build an enterprise platform."
+
+to:
+
+"Let's build the most convincing demonstration of an autonomous AI Solutions Architect."
+
+If we focus on those four core agents, a strong planner, structured memory, and a visible review loop, we'll have a submission that feels genuinely agentic without drowning in infrastructure.
+
+I'd estimate this can be completed in 8–12 focused hours, assuming we lean on AI coding tools for implementation and stay disciplined about avoiding nice-to-have features. The planner and review loop are the two pieces I would refuse to compromise on—they are what differentiate this from a sophisticated chatbot.
+
+
+Proceed!
+
+Excellent. We're in founder mode now.
+
+From this point forward, every decision has one objective:
+
+Build the smallest possible product that convincingly demonstrates an autonomous AI Solutions Architect.
+
+I'm going to act as the Principal Architect while Cursor (or your coding agent) becomes the implementation engineer.
+
+Sprint 0 (30 Minutes)
+Freeze the Scope
+This is the product.
+
+Customer
+
+↓
+
+Atlas
+(AI Solutions Architect)
+
+↓
+
+Planner
+
+↓
+
+Discovery Agent
+
+↓
+
+Architect Agent
+
+↓
+
+Review Agent
+
+↓
+
+Deliverables
+
+• Markdown Report
+• Mermaid Diagram
+• Architecture JSON
+Nothing else.
+
+If an idea isn't on this diagram, it goes into the backlog.
+
+Sprint 1 — Repository Restructure (45 Minutes)
+We want a monorepo with clear boundaries.
+
+aws-architect-discovery-agent/
+
+README.md
+
+docs/
+    architecture.md
+    agent-contracts.md
+    api.md
+
+apps/
+    frontend/
+    backend/
+
+packages/
+    agent-sdk/
+    shared/
+    prompts/
+    schemas/
+
+agents/
+    planner/
+    discovery/
+    architect/
+    review/
+
+tools/
+    rag/
+    diagram/
+    terraform/
+    markdown/
+
+memory/
+    dynamodb/
+
+infra/
+    terraform/
+
+.github/
+    workflows/
+
+tests/
+Deliverable: Repository structure only—no business logic.
+
+Sprint 2 — Define the Agent SDK (1 Hour)
+This is the most important code in the project.
+
+Every future agent must implement the same contract.
+
+class BaseAgent:
+    async def execute(self, context):
+        ...
+
+    async def reason(self, context):
+        ...
+
+    async def plan(self, context):
+        ...
+
+    async def invoke_tools(self, context):
+        ...
+
+    async def reflect(self, context):
+        ...
+This gives us a uniform lifecycle.
+
+Sprint 3 — Define the Shared Memory (45 Minutes)
+Before any AI exists, define what it remembers.
+
+{
+  "session": {},
+  "customer": {},
+  "business_requirements": [],
+  "technical_requirements": [],
+  "known_facts": [],
+  "unknown_facts": [],
+  "architecture": {},
+  "review": {},
+  "questions_remaining": [],
+  "deliverables": {}
+}
+This becomes the single source of truth.
+
+Sprint 4 — Planner (2 Hours)
+This is the brain.
+
+The planner never calls AWS.
+
+It only decides.
+
+Example output:
+
+{
+  "goal": "Complete discovery",
+  "next_agent": "DiscoveryAgent",
+  "reason": "Database information missing"
+}
+If enough information exists:
+
+{
+  "next_agent": "ArchitectAgent"
+}
+Sprint 5 — Discovery Agent (2 Hours)
+Its job is not to ask predefined questions.
+
+Its job is to identify missing knowledge.
+
+Example:
+
+Current memory
+
+Users ✔
+
+Traffic ✔
+
+Database ❌
+Planner:
+
+Database missing.
+Discovery:
+
+"Which database engine are you currently using?"
+
+Once answered
+
+Memory updates.
+
+Planner runs again.
+
+Sprint 6 — Architect Agent (2 Hours)
+Inputs
+
+Requirements.
+
+Outputs
+
+{
+ "services": [],
+ "decisions": [],
+ "diagram": "...",
+ "risks": []
+}
+Use RAG over:
+
+AWS Well-Architected Framework
+
+AWS Reference Architectures
+
+AWS Prescriptive Guidance
+
+This is where Bedrock shines.
+
+Sprint 7 — Review Agent (1 Hour)
+This is the hackathon differentiator.
+
+Review:
+
+Availability
+
+Security
+
+Networking
+
+Scalability
+If invalid
+
+Reject
+
+↓
+
+Planner
+
+↓
+
+Architect
+
+↓
+
+Review
+
+↓
+
+Approve
+Now you've demonstrated reflection.
+
+Sprint 8 — Atlas (1 Hour)
+Atlas is not another model.
+
+Atlas is the conversation manager.
+
+Responsibilities:
+
+Stream responses.
+
+Explain reasoning.
+
+Present results.
+
+Maintain the workshop flow.
+
+Never design infrastructure directly.
+
+Sprint 9 — Tool Registry (1 Hour)
+Everything becomes a tool.
+
+Knowledge Search
+
+Architecture Generator
+
+Diagram Generator
+
+Terraform Generator
+
+Markdown Generator
+Planner chooses.
+
+Orchestrator executes.
+
+Sprint 10 — UI (2 Hours)
+Minimal.
+
+-------------------------------------
+
+Atlas
+
+"Good afternoon.
+
+Let's design your cloud platform."
+
+-------------------------------------
+
+Voice
+
+Chat
+
+Conversation
+
+Architecture
+
+Report
+
+-------------------------------------
+No dashboards.
+
+No analytics.
+
+Sprint 11 — Final Deliverables (1 Hour)
+Generate:
+
+Executive Summary
+
+Architecture Diagram (Mermaid)
+
+AWS Services
+
+Risks
+
+Recommendations
+
+Markdown Report
+
+PDF can be a stretch goal if time permits.
+
+Sprint 12 — Demo Script (30 Minutes)
+This matters more than adding another feature.
+
+Scenario:
+
+"We're a healthcare SaaS company with 50,000 users. We require HIPAA compliance, 99.99% availability, and disaster recovery."
+
+Atlas:
+
+Conducts discovery.
+
+Identifies missing information.
+
+Generates an architecture.
+
+Review Agent rejects it because it's single-region.
+
+Architect revises.
+
+Review approves.
+
+Report and diagram are generated.
+
+In under five minutes, you've shown reasoning, planning, decision-making, action, and reflection.
+
+Definition of Done
+We stop when the following are true:
+
+Voice and chat both work.
+
+The planner dynamically selects the next agent.
+
+Discovery asks adaptive questions.
+
+The architect generates a credible AWS design.
+
+The review agent can reject and request revisions.
+
+Session memory persists context.
+
+A structured report and Mermaid architecture diagram are produced.
+
+The README clearly explains why the system is agentic.
+
+One Final Strategic Decision
+I recommend we stop thinking in terms of "AWS services" and start thinking in terms of "business capabilities."
+
+Every directory, interface, and component should represent a capability:
+
+planner
+
+memory
+
+review
+
+architecture
+
+tool-registry
+
+The AWS services (Lambda, Bedrock, DynamoDB, Step Functions, API Gateway, etc.) become implementation details behind those capabilities.
+
+That separation will make the codebase cleaner, easier to explain to judges, and much simpler to extend after the hackathon.
+
+From here, I'd treat every sprint as producing a working, testable increment. The first coding milestone is the repository skeleton and Agent SDK. Once those are in place, every subsequent sprint simply plugs new capabilities into the same framework.
+
+
+Action out sprint 1,  also give me code to run to be able to do that in my repo.
+
+Absolutely. Sprint 1 should not contain any AI logic. Its only goal is to transform your repository into a scalable monorepo that every subsequent sprint can build upon.
+
+Definition of Done for Sprint 1
+
+✅ Clean project structure
+
+✅ Python package layout
+
+✅ React app placeholder
+
+✅ Terraform scaffold
+
+✅ GitHub Actions scaffold
+
+✅ Documentation folder
+
+✅ Shared packages
+
+✅ Agent folders
+
+✅ Tool folders
+
+✅ Tests folder
+
+✅ VS Code settings
+
+✅ .gitignore
+
+✅ Makefile
+
+Step 1
+From the root of your repository, create a new branch.
+
+git checkout -b feature/sprint-1-foundation
+Step 2
+Run this script from the root of your repository.
+
+Save it as
+
+scripts/bootstrap.sh
+#!/bin/bash
+
+set -e
+
+echo "🚀 Creating project structure..."
+
+mkdir -p apps/frontend
+mkdir -p apps/backend
+
+mkdir -p packages/agent_sdk
+mkdir -p packages/shared
+mkdir -p packages/prompts
+mkdir -p packages/schemas
+
+mkdir -p agents/planner
+mkdir -p agents/discovery
+mkdir -p agents/architect
+mkdir -p agents/review
+
+mkdir -p tools/rag
+mkdir -p tools/diagram
+mkdir -p tools/terraform
+mkdir -p tools/markdown
+
+mkdir -p memory
+
+mkdir -p infra/terraform
+
+mkdir -p docs
+
+mkdir -p tests
+
+mkdir -p .github/workflows
+
+mkdir -p .vscode
+
+touch README.md
+
+touch Makefile
+
+touch .gitignore
+
+touch docs/architecture.md
+touch docs/agent-contracts.md
+touch docs/api.md
+
+touch infra/terraform/main.tf
+touch infra/terraform/providers.tf
+touch infra/terraform/variables.tf
+touch infra/terraform/outputs.tf
+
+touch .github/workflows/ci.yml
+
+echo "✅ Done."
+Run
+
+chmod +x scripts/bootstrap.sh
+./scripts/bootstrap.sh
+Step 3
+Your repository should now resemble:
+
+aws-architect-discovery-agent/
+
+apps/
+    frontend/
+    backend/
+
+packages/
+    agent_sdk/
+    shared/
+    prompts/
+    schemas/
+
+agents/
+    planner/
+    discovery/
+    architect/
+    review/
+
+tools/
+    rag/
+    diagram/
+    terraform/
+    markdown/
+
+memory/
+
+infra/
+    terraform/
+
+docs/
+
+tests/
+
+.github/
+    workflows/
+
+.vscode/
+
+README.md
+Makefile
+.gitignore
+Step 4
+Initialize the backend.
+
+cd apps/backend
+
+python -m venv .venv
+
+source .venv/bin/activate
+
+pip install fastapi uvicorn pydantic boto3
+Create
+
+apps/backend/requirements.txt
+fastapi
+uvicorn[standard]
+boto3
+pydantic
+python-dotenv
+Step 5
+Initialize the frontend.
+
+cd ../../apps
+
+npm create vite@latest frontend \
+-- --template react-ts
+
+cd frontend
+
+npm install
+
+npm install tailwindcss @tailwindcss/vite
+(We'll wire up Tailwind in Sprint 2.)
+
+Step 6
+Create the Python package structure.
+
+Inside every backend package:
+
+__init__.py
+Example
+
+packages/agent_sdk/__init__.py
+
+packages/shared/__init__.py
+
+agents/planner/__init__.py
+
+agents/discovery/__init__.py
+
+agents/architect/__init__.py
+
+agents/review/__init__.py
+Step 7
+Create placeholder README files.
+
+Example
+
+agents/planner/README.md
+# Planner Agent
+
+Responsible for deciding what happens next.
+
+Does NOT call AWS services.
+
+Produces execution plans.
+Do the same for each agent.
+
+Step 8
+Create a proper .gitignore
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Node
+node_modules/
+dist/
+
+# Terraform
+.terraform/
+*.tfstate*
+terraform.tfvars
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+Step 9
+Create the Makefile.
+
+backend:
+	cd apps/backend && uvicorn app.main:app --reload
+
+frontend:
+	cd apps/frontend && npm run dev
+
+lint:
+	echo "Coming soon"
+
+test:
+	echo "Coming soon"
+
+terraform:
+	cd infra/terraform && terraform init
+Step 10
+Minimal GitHub Action.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+
+        with:
+          python-version: "3.12"
+
+      - run: echo "Backend checks coming soon"
+
+      - uses: actions/setup-node@v4
+
+        with:
+          node-version: 22
+
+      - run: echo "Frontend checks coming soon"
+Sprint 1 Deliverables
+At the end of Sprint 1, you should have:
+
+Monorepo structure established.
+
+FastAPI backend initialized.
+
+React + TypeScript frontend initialized.
+
+Terraform scaffolded.
+
+Shared package layout ready.
+
+Four agent directories (planner, discovery, architect, review) with placeholder documentation.
+
+Tool directories ready for future implementations.
+
+Basic CI workflow.
+
+Makefile and .gitignore in place.
+
+One improvement I'd make
+Rather than placing the Python packages at the repository root, I'd colocate all backend Python code under apps/backend to make imports, packaging, testing, and deployment cleaner.
+
+A structure like this is more maintainable:
+
+apps/
+├── backend/
+│   ├── app/
+│   ├── agents/
+│   ├── packages/
+│   ├── tools/
+│   ├── memory/
+│   ├── tests/
+│   └── requirements.txt
+└── frontend/
+This keeps the frontend and backend self-contained while preserving a clean monorepo. It will also simplify Lambda packaging and Terraform deployment later. Since we're only at Sprint 1, this is the ideal time to adopt that layout before any code depends on the directory structure.
+
+

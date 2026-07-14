@@ -1,0 +1,173 @@
+"""Discovery Agent — identifies gaps and asks intelligent questions."""
+
+import json
+import logging
+from typing import Any
+
+from packages.agent_sdk.base import BaseAgent, AgentContext, AgentOutput
+from packages.prompts.discovery import DISCOVERY_SYSTEM_PROMPT, DISCOVERY_USER_PROMPT_TEMPLATE
+from app.services.bedrock import bedrock
+
+logger = logging.getLogger(__name__)
+
+
+class DiscoveryAgent(BaseAgent):
+    """Identifies missing information and generates adaptive questions."""
+
+    name = "DiscoveryAgent"
+    description = "Asks intelligent follow-up questions based on gaps in knowledge."
+    available_tools = ["knowledge_base_search"]
+    memory_access = ["read", "write"]
+
+    async def execute(self, context: AgentContext) -> AgentOutput:
+        """Run discovery: extract facts, identify gaps, generate questions."""
+        try:
+            result = await self._invoke_llm(context)
+        except Exception as e:
+            logger.warning(f"Bedrock failed, using fallback: {e}")
+            result = self._fallback(context)
+
+        # Prepare memory updates
+        memory_updates: dict[str, Any] = {}
+
+        # Extract facts from user's message
+        facts_extracted = result.get("facts_extracted", [])
+        if facts_extracted:
+            existing_facts = context.memory.get("known_facts", [])
+            new_facts = existing_facts + [
+                {
+                    "fact": f["fact"],
+                    "source": "customer",
+                    "confidence": f.get("confidence", 0.9),
+                    "category": f.get("category", "general"),
+                }
+                for f in facts_extracted
+            ]
+            memory_updates["known_facts"] = new_facts
+
+        # Update remaining questions
+        questions = result.get("questions", [])
+        if questions:
+            memory_updates["questions_remaining"] = questions
+
+        # Update gaps
+        gaps = result.get("gaps_remaining", [])
+        if gaps:
+            memory_updates["unknown_facts"] = gaps
+
+        # Check if sufficient for architecture
+        if result.get("sufficient_for_architecture"):
+            memory_updates["status"] = "architecture"
+
+        return AgentOutput(
+            agent_name=self.name,
+            success=True,
+            data=result,
+            memory_updates=memory_updates,
+            reasoning=f"Extracted {len(facts_extracted)} facts, generated {len(questions)} questions.",
+        )
+
+    async def reason(self, context: AgentContext) -> dict[str, Any]:
+        """Determine what information is missing."""
+        memory = context.memory
+        return {
+            "known_count": len(memory.get("known_facts", [])),
+            "unknown_count": len(memory.get("unknown_facts", [])),
+            "has_business": any(
+                f.get("category") == "business"
+                for f in memory.get("known_facts", [])
+                if isinstance(f, dict)
+            ),
+            "has_technical": any(
+                f.get("category") == "technical"
+                for f in memory.get("known_facts", [])
+                if isinstance(f, dict)
+            ),
+        }
+
+    async def plan(self, context: AgentContext) -> dict[str, Any]:
+        """Plan which questions to ask."""
+        return {"action": "generate_questions"}
+
+    async def _invoke_llm(self, context: AgentContext) -> dict[str, Any]:
+        """Use Bedrock to generate intelligent questions."""
+        memory = context.memory
+        known_facts = memory.get("known_facts", [])
+        unknown_facts = memory.get("unknown_facts", [])
+        biz_reqs = memory.get("business_requirements", [])
+        tech_reqs = memory.get("technical_requirements", [])
+        history = memory.get("conversation_history", [])
+        customer = memory.get("customer", {})
+        planner_ctx = context.planner_instructions
+
+        # Get last user message
+        user_messages = [m for m in history if m.get("role") == "user"]
+        user_message = user_messages[-1]["content"] if user_messages else ""
+
+        # Format recent history
+        recent = history[-10:]
+        recent_str = "\n".join(
+            f"{m['role'].upper()}: {m['content'][:200]}" for m in recent
+        )
+
+        user_prompt = DISCOVERY_USER_PROMPT_TEMPLATE.format(
+            customer_name=customer.get("name", "Unknown"),
+            customer_industry=customer.get("industry", "Unknown"),
+            known_facts=json.dumps([f.get("fact", f) if isinstance(f, dict) else f for f in known_facts], indent=2),
+            unknown_facts=json.dumps(unknown_facts),
+            business_requirements=json.dumps(biz_reqs),
+            technical_requirements=json.dumps(tech_reqs),
+            planner_context=json.dumps(planner_ctx),
+            user_message=user_message,
+            recent_history=recent_str or "No previous conversation.",
+        )
+
+        return await bedrock.invoke_json(DISCOVERY_SYSTEM_PROMPT, user_prompt)
+
+    def _fallback(self, context: AgentContext) -> dict[str, Any]:
+        """Rule-based fallback when Bedrock is unavailable."""
+        memory = context.memory
+        known_facts = memory.get("known_facts", [])
+        fact_categories = set()
+        for f in known_facts:
+            if isinstance(f, dict):
+                fact_categories.add(f.get("category", ""))
+
+        questions = []
+        if "business" not in fact_categories:
+            questions.append({
+                "question": "Can you tell me about your business? What industry are you in, and what's your company size?",
+                "category": "business",
+                "reason": "Need to understand business context for architecture decisions",
+                "priority": "critical",
+            })
+        if "technical" not in fact_categories:
+            questions.append({
+                "question": "What does your current technical architecture look like? What languages, databases, and infrastructure do you use?",
+                "category": "technical",
+                "reason": "Need to understand current state to recommend migration path",
+                "priority": "critical",
+            })
+        if "compliance" not in fact_categories:
+            questions.append({
+                "question": "Are there any regulatory or compliance requirements I should be aware of? (HIPAA, PCI-DSS, GDPR, SOC2, etc.)",
+                "category": "compliance",
+                "reason": "Compliance requirements significantly impact architecture choices",
+                "priority": "important",
+            })
+
+        if not questions:
+            questions.append({
+                "question": "What are your availability and disaster recovery objectives? Specifically, what downtime is acceptable (RTO) and how much data can you afford to lose (RPO)?",
+                "category": "operations",
+                "reason": "DR objectives drive multi-region and backup architecture decisions",
+                "priority": "important",
+            })
+
+        return {
+            "facts_extracted": [],
+            "questions": questions,
+            "gaps_remaining": ["business context", "technical architecture", "compliance", "DR objectives"],
+            "sufficient_for_architecture": False,
+            "response_to_customer": questions[0]["question"],
+        }
