@@ -16,13 +16,12 @@ interface Message {
 
 interface WorkshopProps {
   sessionId: string;
-  customerName: string;
   onReset: () => void;
 }
 
 type Tab = 'chat' | 'architecture' | 'report';
 
-export function Workshop({ sessionId, customerName, onReset }: WorkshopProps) {
+export function Workshop({ sessionId, onReset }: WorkshopProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'intro',
@@ -137,7 +136,7 @@ export function Workshop({ sessionId, customerName, onReset }: WorkshopProps) {
             </div>
             <div>
               <h1 className="text-sm font-semibold font-heading text-text">ASA</h1>
-              <p className="text-xs text-muted">Discovery Workshop — {customerName}</p>
+              <p className="text-xs text-muted">Autonomous Solutions Architect</p>
             </div>
           </div>
 

@@ -5,7 +5,7 @@
 const BASE_URL = '/v1';
 
 export interface CreateSessionRequest {
-  customer_name: string;
+  customer_name?: string;
   customer_industry?: string;
   mode?: 'chat' | 'voice';
 }

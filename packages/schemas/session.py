@@ -19,7 +19,7 @@ class ReviewStatus(str, Enum):
 
 
 class CreateSessionRequest(BaseModel):
-    customer_name: str = Field(..., min_length=1, max_length=200)
+    customer_name: str = Field(default="Discovery Session", min_length=1, max_length=200)
     customer_industry: str | None = None
     mode: str = Field(default="chat", pattern="^(chat|voice)$")
 
