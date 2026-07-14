@@ -53,22 +53,20 @@ export interface SessionResponse {
 
 export interface ReportResponse {
   session_id: string;
-  architecture: {
-    services: Array<{ service: string; purpose: string; justification: string }>;
-    decisions: Array<{ decision: string; rationale: string; trade_offs: string }>;
-    diagram_mermaid: string;
-    cost_estimate: Record<string, unknown>;
-    non_functional?: Record<string, unknown>;
-  };
+  generated_at: string;
+  report_markdown: string;
+  executive_summary: string;
+  architecture_decisions: Array<{ decision: string; rationale: string; trade_offs: string; reversibility?: string }>;
+  services: Array<{ service: string; purpose: string; justification: string; alternatives_considered?: string[] }>;
   risks: Array<{ risk: string; impact: string; likelihood: string; mitigation: string }>;
-  review: {
-    status: string;
-    findings: Array<{ category: string; severity: string; finding: string; recommendation: string }>;
-    score: Record<string, number>;
-  };
+  cost_estimate: Record<string, unknown>;
+  diagram_mermaid: string;
+  terraform_snippet: string;
+  review_score: Record<string, number>;
+  review_findings: Array<{ category: string; severity: string; finding: string; recommendation: string }>;
   business_requirements: string[];
   technical_requirements: string[];
-  known_facts: Array<{ fact: string; category?: string }>;
+  known_facts: Array<{ fact: string; category?: string; confidence?: number }>;
 }
 
 export async function createSession(data: CreateSessionRequest): Promise<CreateSessionResponse> {

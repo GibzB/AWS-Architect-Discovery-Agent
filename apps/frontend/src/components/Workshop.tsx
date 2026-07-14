@@ -3,6 +3,7 @@ import { sendMessage, getSession, getReport, type SendMessageResponse, type Sess
 import { ChatMessage } from './ChatMessage';
 import { SessionPanel } from './SessionPanel';
 import { ReportView } from './ReportView';
+import { VoiceButton } from './VoiceButton';
 
 interface Message {
   id: string;
@@ -190,6 +191,18 @@ export function Workshop({ sessionId, customerName, onReset }: WorkshopProps) {
               {/* Input */}
               <div className="flex-none border-t border-border bg-surface px-6 py-4">
                 <div className="flex gap-3 items-end max-w-4xl mx-auto">
+                  <VoiceButton
+                    sessionId={sessionId}
+                    onTranscript={(role, text) => {
+                      const msg: Message = {
+                        id: `voice-${Date.now()}`,
+                        role,
+                        content: text,
+                        timestamp: new Date().toISOString(),
+                      };
+                      setMessages(prev => [...prev, msg]);
+                    }}
+                  />
                   <textarea
                     ref={inputRef}
                     value={input}
@@ -269,18 +282,16 @@ export function Workshop({ sessionId, customerName, onReset }: WorkshopProps) {
 }
 
 function ArchitectureView({ report }: { report: ReportResponse }) {
-  const { architecture } = report;
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <h2 className="text-xl font-heading font-bold text-text">Architecture</h2>
 
       {/* Mermaid Diagram (raw) */}
-      {architecture.diagram_mermaid && (
+      {report.diagram_mermaid && (
         <div className="bg-surface rounded-[16px] border border-border p-6">
           <h3 className="text-sm font-medium text-text-secondary mb-3">Diagram</h3>
           <pre className="text-xs text-muted overflow-x-auto whitespace-pre-wrap font-mono">
-            {architecture.diagram_mermaid}
+            {report.diagram_mermaid}
           </pre>
         </div>
       )}
@@ -289,7 +300,7 @@ function ArchitectureView({ report }: { report: ReportResponse }) {
       <div className="bg-surface rounded-[16px] border border-border p-6">
         <h3 className="text-sm font-medium text-text-secondary mb-4">AWS Services</h3>
         <div className="space-y-3">
-          {architecture.services.map((svc, i) => (
+          {report.services.map((svc, i) => (
             <div key={i} className="bg-background rounded-xl p-4 border border-border">
               <div className="flex items-start justify-between">
                 <div>
@@ -304,11 +315,11 @@ function ArchitectureView({ report }: { report: ReportResponse }) {
       </div>
 
       {/* Decisions */}
-      {architecture.decisions.length > 0 && (
+      {report.architecture_decisions.length > 0 && (
         <div className="bg-surface rounded-[16px] border border-border p-6">
           <h3 className="text-sm font-medium text-text-secondary mb-4">Architecture Decisions</h3>
           <div className="space-y-3">
-            {architecture.decisions.map((dec, i) => (
+            {report.architecture_decisions.map((dec, i) => (
               <div key={i} className="bg-background rounded-xl p-4 border border-border">
                 <p className="text-sm font-medium text-text">{dec.decision}</p>
                 <p className="text-xs text-text-secondary mt-1">{dec.rationale}</p>

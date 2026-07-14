@@ -11,6 +11,7 @@ from agents.discovery.agent import DiscoveryAgent
 from agents.architect.agent import ArchitectAgent
 from agents.review.agent import ReviewAgent
 from app.services.memory_store import memory_store
+from app.services.report_service import report_service
 
 logger = logging.getLogger(__name__)
 
@@ -126,15 +127,7 @@ class Orchestrator:
             return None
         if session.get("review", {}).get("status") != "approved":
             return None
-        return {
-            "session_id": session_id,
-            "architecture": session.get("architecture", {}),
-            "risks": session.get("risks", []),
-            "review": session.get("review", {}),
-            "business_requirements": session.get("business_requirements", []),
-            "technical_requirements": session.get("technical_requirements", []),
-            "known_facts": session.get("known_facts", []),
-        }
+        return report_service.generate_all(session)
 
     def _build_context(
         self, session: dict[str, Any], planner_instructions: dict[str, Any] | None = None

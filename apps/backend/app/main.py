@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.sessions import router as sessions_router
+from app.routes.voice import router as voice_router
 
 app = FastAPI(
     title="Atlas Discovery API",
@@ -37,3 +38,4 @@ async def health():
 
 # Register API routes
 app.include_router(sessions_router, prefix="/v1")
+app.include_router(voice_router)

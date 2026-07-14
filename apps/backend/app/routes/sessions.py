@@ -100,7 +100,7 @@ async def get_session(session_id: str):
 
 @router.get("/{session_id}/report")
 async def get_report(session_id: str):
-    """Get the final report (only available after review approval)."""
+    """Get the final report with all deliverables (only after review approval)."""
     report = await orchestrator.get_report(session_id)
     if report is None:
         raise HTTPException(
@@ -108,3 +108,21 @@ async def get_report(session_id: str):
             detail="Report not available. Workshop must be completed and architecture approved.",
         )
     return report
+
+
+@router.get("/{session_id}/terraform")
+async def get_terraform(session_id: str):
+    """Get generated Terraform code."""
+    report = await orchestrator.get_report(session_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Not available until review approved.")
+    return {"session_id": session_id, "terraform": report.get("terraform_snippet", "")}
+
+
+@router.get("/{session_id}/diagram")
+async def get_diagram(session_id: str):
+    """Get the architecture diagram in Mermaid format."""
+    report = await orchestrator.get_report(session_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Not available until review approved.")
+    return {"session_id": session_id, "diagram_mermaid": report.get("diagram_mermaid", "")}

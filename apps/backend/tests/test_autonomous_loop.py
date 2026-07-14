@@ -147,5 +147,8 @@ async def test_full_workshop_loop():
         report_resp = await client.get(f"/v1/sessions/{session_id}/report")
         assert report_resp.status_code == 200
         report = report_resp.json()
-        assert "architecture" in report
-        assert len(report["architecture"]["services"]) == 3
+        assert "services" in report
+        assert len(report["services"]) == 3
+        assert "report_markdown" in report
+        assert "terraform_snippet" in report
+        assert "diagram_mermaid" in report

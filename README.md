@@ -132,11 +132,11 @@ make frontend   # React on :5173
 | 3 | Infrastructure (Terraform) | ✅ Complete |
 | 4 | Backend API + Orchestrator | ✅ Complete |
 | 5 | Agent Framework (Planner, Discovery, Architect, Review) | ✅ Complete |
-| 6 | Voice (Nova Sonic) | 🔲 Next |
-| 7 | Frontend | 🔲 |
-| 8 | Testing | 🔲 |
-| 9 | Deployment | 🔲 |
-| 10 | Optimisation | 🔲 |
+| 6 | Voice (Nova Sonic / Polly) | ✅ Complete |
+| 7 | Frontend | ✅ Complete |
+| 8 | Testing | ✅ Complete |
+| 9 | Deployment | ✅ Complete |
+| 10 | Optimisation | ✅ Complete |
 
 ## Key Design Decisions
 
