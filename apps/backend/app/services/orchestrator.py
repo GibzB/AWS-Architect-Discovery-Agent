@@ -1,4 +1,4 @@
-"""Atlas Orchestrator — coordinates the autonomous reasoning loop."""
+"""ASA Orchestrator — coordinates the autonomous reasoning loop."""
 
 import json
 import logging
@@ -24,9 +24,9 @@ AGENTS = {
 
 planner = PlannerAgent()
 
-# Atlas personality — wraps raw agent output into a conversational response
-ATLAS_INTRO = (
-    "I'm Atlas, your AI Solutions Architect. "
+# ASA personality — wraps raw agent output into a conversational response
+ASA_INTRO = (
+    "I'm ASA, your Autonomous Solutions Architect. "
     "I'll guide you through today's cloud discovery workshop."
 )
 
@@ -39,9 +39,9 @@ class Orchestrator:
         session_id = str(uuid.uuid4())
         session = memory_store.create_session(session_id, customer_name, customer_industry)
 
-        # Add Atlas introduction to conversation
+        # Add ASA introduction to conversation
         intro = (
-            f"Good afternoon. {ATLAS_INTRO}\n\n"
+            f"Good afternoon. {ASA_INTRO}\n\n"
             f"My role is to understand your business objectives, identify technical constraints, "
             f"evaluate risks, and work with my specialist colleagues to produce an "
             f"implementation-ready architecture.\n\n"

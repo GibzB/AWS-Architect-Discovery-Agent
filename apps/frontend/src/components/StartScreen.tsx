@@ -44,8 +44,8 @@ export function StartScreen({ onSessionCreated }: StartScreenProps) {
               <path d="M2 12l10 5 10-5" />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold font-heading text-text mb-2">Atlas</h1>
-          <p className="text-text-secondary text-sm">AI Solutions Architect</p>
+          <h1 className="text-3xl font-bold font-heading text-text mb-2">ASA</h1>
+          <p className="text-text-secondary text-sm">Autonomous Solutions Architect</p>
           <p className="text-muted text-xs mt-1">Cloud Discovery Workshop</p>
         </div>
 

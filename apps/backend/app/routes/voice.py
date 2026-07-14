@@ -1,4 +1,4 @@
-"""Voice WebSocket endpoint — bridges browser audio to Atlas orchestrator.
+"""Voice WebSocket endpoint — bridges browser audio to ASA orchestrator.
 
 Architecture:
 - Speech-to-Text: Browser's Web Speech API (client-side, zero latency)
@@ -62,7 +62,7 @@ async def voice_websocket(ws: WebSocket, session_id: str):
 
     Server → Client:
       {"type": "status", "state": "ready|thinking|speaking|done"}
-      {"type": "text", "content": "…"}     — Atlas text response
+      {"type": "text", "content": "…"}     — ASA text response
       {"type": "audio", "data": "base64"}  — TTS audio chunk
       {"type": "agent_trace", "data": {}}  — agent reasoning trace
       {"type": "error", "message": "…"}
@@ -86,9 +86,9 @@ async def voice_websocket(ws: WebSocket, session_id: str):
             msg_type = msg.get("type")
 
             if msg_type == "start":
-                # Send Atlas greeting as audio
+                # Send ASA greeting as audio
                 greeting = (
-                    "Good afternoon. I'm Atlas, your AI Solutions Architect. "
+                    "Good afternoon. I'm ASA, your Autonomous Solutions Architect. "
                     "I'll guide you through today's cloud discovery workshop. "
                     "Tell me about your organisation and what's driving this cloud initiative."
                 )

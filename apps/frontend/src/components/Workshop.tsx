@@ -27,7 +27,7 @@ export function Workshop({ sessionId, customerName, onReset }: WorkshopProps) {
     {
       id: 'intro',
       role: 'assistant',
-      content: `Good afternoon. I'm Atlas, your AI Solutions Architect. I'll guide you through today's cloud discovery workshop.\n\nMy role is to understand your business objectives, identify technical constraints, evaluate risks, and work with my specialist colleagues to produce an implementation-ready architecture.\n\nLet's begin. Can you tell me about your organisation and what's driving this cloud initiative?`,
+      content: `Good afternoon. I'm ASA, your Autonomous Solutions Architect. I'll guide you through today's cloud discovery workshop.\n\nMy role is to understand your business objectives, identify technical constraints, evaluate risks, and work with my specialist colleagues to produce an implementation-ready architecture.\n\nLet's begin. Can you tell me about your organisation and what's driving this cloud initiative?`,
       timestamp: new Date().toISOString(),
     },
   ]);
@@ -136,7 +136,7 @@ export function Workshop({ sessionId, customerName, onReset }: WorkshopProps) {
               </svg>
             </div>
             <div>
-              <h1 className="text-sm font-semibold font-heading text-text">Atlas</h1>
+              <h1 className="text-sm font-semibold font-heading text-text">ASA</h1>
               <p className="text-xs text-muted">Discovery Workshop — {customerName}</p>
             </div>
           </div>
@@ -182,7 +182,7 @@ export function Workshop({ sessionId, customerName, onReset }: WorkshopProps) {
                       <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
                       <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                     </div>
-                    <span>Atlas is thinking...</span>
+                    <span>ASA is thinking...</span>
                   </div>
                 )}
                 <div ref={messagesEndRef} />

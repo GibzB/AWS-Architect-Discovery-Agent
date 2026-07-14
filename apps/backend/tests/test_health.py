@@ -13,4 +13,4 @@ async def test_health_endpoint():
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "healthy"
-    assert data["service"] == "atlas-discovery"
+    assert data["service"] == "asa-discovery"

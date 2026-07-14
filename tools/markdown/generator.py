@@ -26,7 +26,7 @@ def generate_report(session: dict[str, Any]) -> str:
 
 **Generated:** {now}
 **Status:** {'✅ Approved' if review.get('status') == 'approved' else '⏳ Pending'}
-**AI Solutions Architect:** Atlas
+**AI Solutions Architect:** ASA
 
 ---""")
 
@@ -37,7 +37,7 @@ def generate_report(session: dict[str, Any]) -> str:
 
 This report presents the recommended AWS cloud architecture for {customer.get('name', 'the customer')},
 a {customer.get('industry', '')} organisation. The architecture was designed through an autonomous
-discovery workshop conducted by Atlas, validating requirements across business, technical,
+discovery workshop conducted by ASA, validating requirements across business, technical,
 compliance, and operational dimensions.
 
 **Key Services:** {', '.join(svc_names[:8])}
@@ -174,7 +174,7 @@ compliance, and operational dimensions.
     # Footer
     sections.append("""---
 
-*This report was generated autonomously by Atlas, an AI Solutions Architect powered by
+*This report was generated autonomously by ASA, an Autonomous Solutions Architect powered by
 Amazon Bedrock. All recommendations should be validated by qualified AWS architects before
 implementation.*
 """)

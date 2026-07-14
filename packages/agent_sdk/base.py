@@ -29,7 +29,7 @@ class AgentOutput:
 
 
 class BaseAgent(ABC):
-    """All Atlas agents implement this lifecycle."""
+    """All ASA agents implement this lifecycle."""
 
     name: str
     description: str

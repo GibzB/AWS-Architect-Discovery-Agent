@@ -1,4 +1,4 @@
-"""Atlas Discovery — FastAPI application entry point."""
+"""ASA Discovery — FastAPI application entry point."""
 
 import sys
 from pathlib import Path
@@ -15,8 +15,8 @@ from app.routes.sessions import router as sessions_router
 from app.routes.voice import router as voice_router
 
 app = FastAPI(
-    title="Atlas Discovery API",
-    description="AI Solutions Architect — Cloud Discovery Workshop Engine",
+    title="ASA Discovery API",
+    description="Autonomous Solutions Architect — Cloud Discovery Workshop Engine",
     version="0.1.0",
 )
 
@@ -33,7 +33,7 @@ app.add_middleware(
 @app.get("/health")
 async def health():
     """Health check endpoint."""
-    return {"status": "healthy", "service": "atlas-discovery"}
+    return {"status": "healthy", "service": "asa-discovery"}
 
 
 # Register API routes

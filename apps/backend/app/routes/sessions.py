@@ -1,4 +1,4 @@
-"""Session API routes — the primary interface for the Atlas workshop."""
+"""Session API routes — the primary interface for the ASA workshop."""
 
 import logging
 from fastapi import APIRouter, HTTPException
@@ -38,7 +38,7 @@ async def create_session(request: CreateSessionRequest):
 
 @router.post("/{session_id}/messages", response_model=SendMessageResponse)
 async def send_message(session_id: str, request: SendMessageRequest):
-    """Send a message to Atlas and receive the next response."""
+    """Send a message to ASA and receive the next response."""
     result = await orchestrator.process_message(session_id, request.content)
 
     if "error" in result:
