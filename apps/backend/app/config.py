@@ -8,7 +8,7 @@ from dataclasses import dataclass
 class Settings:
     """App settings — loaded from environment."""
 
-    aws_region: str = os.getenv("AWS_REGION", "us-east-1")
+    aws_region: str = os.getenv("AWS_REGION_NAME", os.getenv("AWS_REGION", "eu-west-1"))
     dynamodb_table: str = os.getenv("DYNAMODB_TABLE_NAME", "asa-discovery-dev-sessions")
     s3_reports_bucket: str = os.getenv("S3_REPORTS_BUCKET", "asa-discovery-dev-reports")
     bedrock_model_id: str = os.getenv("BEDROCK_MODEL_ID", "amazon.nova-pro-v1:0")
