@@ -2,7 +2,7 @@
  * Atlas Discovery API client
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || 'http://3.250.218.142:8000/v1';
+const BASE_URL = import.meta.env.VITE_API_URL || 'https://tdj9q54rxg.execute-api.eu-west-1.amazonaws.com/v1';
 
 export interface CreateSessionRequest {
   customer_name?: string;

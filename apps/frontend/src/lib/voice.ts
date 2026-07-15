@@ -1,21 +1,18 @@
 /**
- * Voice client — WebSocket + Polly TTS + Browser STT.
+ * Voice client — REST API + Browser Speech Synthesis + Browser Speech Recognition.
  *
- * Flow:
- * 1. Connect WebSocket to /ws/call
- * 2. Server sends greeting audio (Polly)
- * 3. After audio finishes, browser STT starts listening
- * 4. User speaks → 5 second silence → accumulated text sent to server
- * 5. Server processes through agent pipeline → sends response audio
- * 6. Repeat until hangup
+ * Works entirely over HTTPS (no WebSocket needed):
+ * - STT: Browser SpeechRecognition API (Chrome)
+ * - Messages: Same REST API as chat (/v1/sessions/{id}/messages)
+ * - TTS: Browser SpeechSynthesis API
  *
  * Turn-taking:
- * - STT pauses while server audio is playing
- * - 5-second debounce ensures user can finish their thought
- * - STT resumes after last audio chunk finishes playing
+ * - User speaks → 5 second silence → text sent to API
+ * - ASA responds → browser speaks the response
+ * - After speech ends → listen again
  */
 
-const SAMPLE_RATE = 16000;
+import { sendMessage, createSession } from './api';
 
 export type VoiceStatus = 'idle' | 'connecting' | 'live' | 'processing' | 'done' | 'error';
 
@@ -28,17 +25,14 @@ export interface VoiceCallbacks {
 }
 
 export class VoiceClient {
-  private ws: WebSocket | null = null;
-  private audioCtx: AudioContext | null = null;
   private recognition: any = null;
   private callbacks: VoiceCallbacks;
   private status: VoiceStatus = 'idle';
-  private nextPlayTime = 0;
   private isMuted = false;
-  private scheduledSources: AudioBufferSourceNode[] = [];
+  private sessionId: string | null = null;
   private pendingText = '';
   private sendTimer: any = null;
-  private isPlaying = false;
+  private speaking = false;
 
   constructor(callbacks: VoiceCallbacks) {
     this.callbacks = callbacks;
@@ -50,121 +44,56 @@ export class VoiceClient {
   async start(): Promise<void> {
     this.setStatus('connecting');
 
-    this.audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-
-    const wsUrl = this.getWsUrl();
-    this.ws = new WebSocket(wsUrl);
-
-    this.ws.onopen = () => {
-      this.ws!.send(JSON.stringify({ type: 'start' }));
-    };
-
-    this.ws.onmessage = (ev) => {
-      try {
-        this.handleMessage(JSON.parse(ev.data));
-      } catch { /* ignore */ }
-    };
-
-    this.ws.onerror = () => {
-      // If WebSocket fails (e.g. on Amplify/Lambda), show helpful message
-      const isRemote = !['localhost', '127.0.0.1'].includes(window.location.hostname);
-      if (isRemote) {
-        this.callbacks.onError('Voice requires the local backend. Run: make backend');
-      } else {
-        this.callbacks.onError('Voice connection failed. Is the backend running?');
-      }
-      this.cleanup();
+    // Create a session for this voice call
+    try {
+      const session = await createSession({ customer_name: 'Voice Session' });
+      this.sessionId = session.session_id;
+    } catch {
+      this.callbacks.onError('Cannot connect to ASA backend.');
       this.setStatus('error');
-    };
+      return;
+    }
 
-    this.ws.onclose = () => {
-      if (this.status === 'live') this.setStatus('done');
-      this.cleanup();
-    };
+    this.setStatus('live');
+
+    // Speak greeting
+    const greeting = "Hello, I'm ASA, your Autonomous Solutions Architect. Tell me about your organisation and what's driving this cloud initiative.";
+    this.callbacks.onTranscript('agent', greeting);
+    await this.speak(greeting);
+
+    // Start listening
+    this.startSTT();
   }
 
   toggleMute(): boolean {
     this.isMuted = !this.isMuted;
     if (this.isMuted) {
       this.stopSTT();
-    } else if (!this.isPlaying) {
+    } else if (!this.speaking) {
       this.startSTT();
     }
     return this.isMuted;
   }
 
   hangup(): void {
-    this.clearAudioQueue();
     this.stopSTT();
-    // Send any pending text first
     this.flushPendingText();
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'hangup' }));
-    }
-    this.setStatus('processing');
+    window.speechSynthesis.cancel();
+    this.setStatus('done');
+    this.callbacks.onDigest({ summary: 'Voice session ended.' });
   }
 
-  // ── Message Handler ──
-
-  private handleMessage(msg: { type: string; [key: string]: any }): void {
-    switch (msg.type) {
-      case 'status':
-        this.handleStatus(msg.state);
-        break;
-      case 'audio':
-        this.isPlaying = true;
-        this.stopSTT(); // Don't listen while ASA speaks
-        this.playAudioChunk(msg.data);
-        break;
-      case 'transcript':
-        this.callbacks.onTranscript(msg.role, msg.text);
-        if (msg.role === 'agent') {
-          // After agent transcript, audio will follow then STT resumes
-        }
-        break;
-      case 'digest':
-        this.callbacks.onDigest(msg.data);
-        this.setStatus('done');
-        break;
-      case 'error':
-        this.callbacks.onError(msg.message);
-        this.setStatus('error');
-        break;
-    }
-  }
-
-  private handleStatus(state: string): void {
-    switch (state) {
-      case 'connecting':
-        this.setStatus('connecting');
-        break;
-      case 'live':
-        this.setStatus('live');
-        // STT will start after greeting audio finishes
-        break;
-      case 'processing':
-        this.setStatus('processing');
-        this.stopSTT();
-        break;
-      case 'done':
-        this.setStatus('done');
-        this.cleanup();
-        break;
-    }
-  }
-
-  // ── STT (Browser Speech Recognition) ──
+  // ── Speech-to-Text ──
 
   private startSTT(): void {
-    if (this.isMuted || this.isPlaying) return;
+    if (this.isMuted || this.speaking) return;
 
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) {
-      this.callbacks.onError('Speech recognition not supported. Use Chrome.');
+      this.callbacks.onError('Speech recognition requires Chrome.');
       return;
     }
-
-    if (this.recognition) return; // Already running
+    if (this.recognition) return;
 
     this.recognition = new SR();
     this.recognition.continuous = true;
@@ -177,119 +106,97 @@ export class VoiceClient {
         const text = last[0].transcript.trim();
         if (text) {
           this.pendingText += (this.pendingText ? ' ' : '') + text;
-          // Reset 5-second timer
+          // 5 second debounce
           if (this.sendTimer) clearTimeout(this.sendTimer);
           this.sendTimer = setTimeout(() => this.flushPendingText(), 5000);
         }
       }
     };
 
-    this.recognition.onerror = (event: any) => {
-      if (event.error !== 'no-speech' && event.error !== 'aborted') {
-        console.warn('STT error:', event.error);
+    this.recognition.onerror = (e: any) => {
+      if (e.error !== 'no-speech' && e.error !== 'aborted') {
+        console.warn('STT error:', e.error);
       }
     };
 
     this.recognition.onend = () => {
       this.recognition = null;
-      // Restart if we should still be listening
-      if (this.status === 'live' && !this.isMuted && !this.isPlaying) {
+      if (this.status === 'live' && !this.isMuted && !this.speaking) {
         setTimeout(() => this.startSTT(), 300);
       }
     };
 
-    try {
-      this.recognition.start();
-    } catch { /* ignore - might already be started */ }
+    try { this.recognition.start(); } catch { /* already started */ }
   }
 
   private stopSTT(): void {
     if (this.recognition) {
-      try { this.recognition.abort(); } catch { /* ignore */ }
+      try { this.recognition.abort(); } catch {}
       this.recognition = null;
     }
   }
 
-  private flushPendingText(): void {
+  private async flushPendingText(): Promise<void> {
     if (this.sendTimer) { clearTimeout(this.sendTimer); this.sendTimer = null; }
-    if (this.pendingText && this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: 'transcript_input', text: this.pendingText }));
-      this.pendingText = '';
+    if (!this.pendingText || !this.sessionId) return;
+
+    const text = this.pendingText;
+    this.pendingText = '';
+
+    this.callbacks.onTranscript('user', text);
+    this.stopSTT();
+    this.setStatus('processing');
+
+    try {
+      const response = await sendMessage(this.sessionId, text);
+      this.callbacks.onTranscript('agent', response.content);
+      this.setStatus('live');
+      await this.speak(response.content);
+      // Resume listening after speaking
+      this.startSTT();
+    } catch {
+      this.callbacks.onError('Failed to get response.');
+      this.setStatus('live');
+      this.startSTT();
     }
   }
 
-  // ── Audio Playback ──
+  // ── Text-to-Speech ──
 
-  private playAudioChunk(b64: string): void {
-    if (!this.audioCtx) return;
+  private speak(text: string): Promise<void> {
+    return new Promise((resolve) => {
+      this.speaking = true;
+      this.stopSTT();
+      window.speechSynthesis.cancel();
 
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    const int16 = new Int16Array(bytes.buffer);
-    const float32 = new Float32Array(int16.length);
-    for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
+      const clean = text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/---/g, '').replace(/\n+/g, '. ').replace(/[#*`]/g, '');
+      const utterance = new SpeechSynthesisUtterance(clean);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
 
-    const buffer = this.audioCtx.createBuffer(1, float32.length, SAMPLE_RATE);
-    buffer.copyToChannel(float32, 0);
+      // Prefer a natural voice
+      const voices = window.speechSynthesis.getVoices();
+      const preferred = voices.find(v =>
+        v.name.includes('Daniel') || v.name.includes('Google UK English Male') ||
+        v.name.includes('Samantha') || v.name.includes('Alex')
+      );
+      if (preferred) utterance.voice = preferred;
 
-    const source = this.audioCtx.createBufferSource();
-    source.buffer = buffer;
-    source.connect(this.audioCtx.destination);
+      utterance.onend = () => {
+        this.speaking = false;
+        resolve();
+      };
+      utterance.onerror = () => {
+        this.speaking = false;
+        resolve();
+      };
 
-    const now = this.audioCtx.currentTime;
-    if (this.nextPlayTime < now) this.nextPlayTime = now + 0.05;
-    source.start(this.nextPlayTime);
-    this.nextPlayTime += buffer.duration;
-
-    this.scheduledSources.push(source);
-    source.onended = () => {
-      this.scheduledSources = this.scheduledSources.filter(s => s !== source);
-      // When all audio finished playing, resume STT
-      if (this.scheduledSources.length === 0) {
-        this.isPlaying = false;
-        // Wait 1 second after audio ends before listening
-        setTimeout(() => {
-          if (this.status === 'live' && !this.isMuted) {
-            this.startSTT();
-          }
-        }, 1000);
-      }
-    };
-  }
-
-  private clearAudioQueue(): void {
-    for (const s of this.scheduledSources) {
-      try { s.stop(); } catch { /* ignore */ }
-    }
-    this.scheduledSources = [];
-    this.nextPlayTime = 0;
-    this.isPlaying = false;
-  }
-
-  // ── Utilities ──
-
-  private getWsUrl(): string {
-    // Use EC2 backend for WebSocket (supports persistent connections)
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return `ws://${window.location.host}/ws/call`;
-    }
-    // Production: EC2 backend
-    return 'ws://3.250.218.142:8000/ws/call';
+      window.speechSynthesis.speak(utterance);
+    });
   }
 
   private setStatus(status: VoiceStatus): void {
     this.status = status;
     this.callbacks.onStatusChange(status);
-  }
-
-  private cleanup(): void {
-    this.stopSTT();
-    this.clearAudioQueue();
-    if (this.sendTimer) { clearTimeout(this.sendTimer); this.sendTimer = null; }
-    if (this.audioCtx) { this.audioCtx.close(); this.audioCtx = null; }
-    if (this.ws) { this.ws.close(); this.ws = null; }
-    this.pendingText = '';
   }
 }
