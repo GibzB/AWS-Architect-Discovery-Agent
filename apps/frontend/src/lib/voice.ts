@@ -1,18 +1,21 @@
 /**
- * Voice client — real-time bidirectional audio call.
+ * Voice client — WebSocket + Polly TTS + Browser STT.
  *
- * Protocol (mirrors vox-brief):
- * - Captures mic audio via ScriptProcessor → PCM 16-bit 16kHz → base64
- * - Sends audio chunks over WebSocket to backend
- * - Receives audio chunks back and plays them
- * - Receives transcripts for live display
+ * Flow:
+ * 1. Connect WebSocket to /ws/call
+ * 2. Server sends greeting audio (Polly)
+ * 3. After audio finishes, browser STT starts listening
+ * 4. User speaks → 5 second silence → accumulated text sent to server
+ * 5. Server processes through agent pipeline → sends response audio
+ * 6. Repeat until hangup
  *
- * Fallback: If WebSocket fails (e.g. on Lambda), uses browser
- * SpeechRecognition + sends text via transcript_input message.
+ * Turn-taking:
+ * - STT pauses while server audio is playing
+ * - 5-second debounce ensures user can finish their thought
+ * - STT resumes after last audio chunk finishes playing
  */
 
 const SAMPLE_RATE = 16000;
-const BUFFER_SIZE = 4096;
 
 export type VoiceStatus = 'idle' | 'connecting' | 'live' | 'processing' | 'done' | 'error';
 
@@ -27,15 +30,15 @@ export interface VoiceCallbacks {
 export class VoiceClient {
   private ws: WebSocket | null = null;
   private audioCtx: AudioContext | null = null;
-  private mediaStream: MediaStream | null = null;
-  private scriptProcessor: ScriptProcessorNode | null = null;
   private recognition: any = null;
   private callbacks: VoiceCallbacks;
   private status: VoiceStatus = 'idle';
   private nextPlayTime = 0;
   private isMuted = false;
   private scheduledSources: AudioBufferSourceNode[] = [];
-  private useSTTFallback = false;
+  private pendingText = '';
+  private sendTimer: any = null;
+  private isPlaying = false;
 
   constructor(callbacks: VoiceCallbacks) {
     this.callbacks = callbacks;
@@ -47,19 +50,9 @@ export class VoiceClient {
   async start(): Promise<void> {
     this.setStatus('connecting');
 
-    try {
-      // Request mic access
-      this.mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-      this.audioCtx = new AudioContext();
-    } catch {
-      this.callbacks.onError('Microphone access denied.');
-      this.setStatus('idle');
-      return;
-    }
+    this.audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
 
-    // Determine WebSocket URL
     const wsUrl = this.getWsUrl();
-
     this.ws = new WebSocket(wsUrl);
 
     this.ws.onopen = () => {
@@ -68,43 +61,50 @@ export class VoiceClient {
 
     this.ws.onmessage = (ev) => {
       try {
-        const msg = JSON.parse(ev.data);
-        this.handleMessage(msg);
-      } catch { /* ignore non-JSON */ }
+        this.handleMessage(JSON.parse(ev.data));
+      } catch { /* ignore */ }
     };
 
     this.ws.onerror = () => {
-      this.callbacks.onError('Voice connection error. Ensure the backend is running locally.');
+      // If WebSocket fails (e.g. on Amplify/Lambda), show helpful message
+      const isRemote = !['localhost', '127.0.0.1'].includes(window.location.hostname);
+      if (isRemote) {
+        this.callbacks.onError('Voice requires the local backend. Run: make backend');
+      } else {
+        this.callbacks.onError('Voice connection failed. Is the backend running?');
+      }
       this.cleanup();
       this.setStatus('error');
     };
 
     this.ws.onclose = () => {
-      if (this.status === 'live') {
-        this.setStatus('done');
-      }
+      if (this.status === 'live') this.setStatus('done');
       this.cleanup();
     };
   }
 
   toggleMute(): boolean {
     this.isMuted = !this.isMuted;
+    if (this.isMuted) {
+      this.stopSTT();
+    } else if (!this.isPlaying) {
+      this.startSTT();
+    }
     return this.isMuted;
   }
 
   hangup(): void {
+    this.clearAudioQueue();
+    this.stopSTT();
+    // Send any pending text first
+    this.flushPendingText();
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'hangup' }));
     }
-    this.stopCapture();
     this.setStatus('processing');
   }
 
-  private getWsUrl(): string {
-    // Always connect through the same host (Vite proxy handles in dev)
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws/call`;
-  }
+  // ── Message Handler ──
 
   private handleMessage(msg: { type: string; [key: string]: any }): void {
     switch (msg.type) {
@@ -112,17 +112,14 @@ export class VoiceClient {
         this.handleStatus(msg.state);
         break;
       case 'audio':
+        this.isPlaying = true;
+        this.stopSTT(); // Don't listen while ASA speaks
         this.playAudioChunk(msg.data);
-        // Pause STT while agent is speaking to avoid capturing playback
-        this.stopSTTFallback();
         break;
       case 'transcript':
         this.callbacks.onTranscript(msg.role, msg.text);
-        // After agent transcript, wait for audio to finish then restart STT
         if (msg.role === 'agent') {
-          setTimeout(() => {
-            if (this.status === 'live') this.startSTTFallback();
-          }, 3000);
+          // After agent transcript, audio will follow then STT resumes
         }
         break;
       case 'digest':
@@ -143,13 +140,11 @@ export class VoiceClient {
         break;
       case 'live':
         this.setStatus('live');
-        this.startCapture();
-        // Also start STT fallback if available
-        this.startSTTFallback();
+        // STT will start after greeting audio finishes
         break;
       case 'processing':
         this.setStatus('processing');
-        this.stopCapture();
+        this.stopSTT();
         break;
       case 'done':
         this.setStatus('done');
@@ -158,103 +153,68 @@ export class VoiceClient {
     }
   }
 
-  // ── Audio Capture ──
+  // ── STT (Browser Speech Recognition) ──
 
-  private startCapture(): void {
-    if (!this.audioCtx || !this.mediaStream) return;
+  private startSTT(): void {
+    if (this.isMuted || this.isPlaying) return;
 
-    const src = this.audioCtx.createMediaStreamSource(this.mediaStream);
-    this.scriptProcessor = this.audioCtx.createScriptProcessor(BUFFER_SIZE, 1, 1);
-
-    this.scriptProcessor.onaudioprocess = (e) => {
-      if (this.isMuted || this.status !== 'live' || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-
-      const raw = e.inputBuffer.getChannelData(0);
-
-      // Calculate audio level for visualization
-      let sum = 0;
-      for (let i = 0; i < raw.length; i++) sum += raw[i] * raw[i];
-      this.callbacks.onAudioLevel(Math.sqrt(sum / raw.length));
-
-      // Downsample and send
-      const ds = this.downsample(raw, this.audioCtx!.sampleRate, SAMPLE_RATE);
-      const pcm = this.float32ToInt16(ds);
-      const b64 = this.arrayBufferToBase64(pcm.buffer as ArrayBuffer);
-      this.ws!.send(JSON.stringify({ type: 'audio', data: b64 }));
-    };
-
-    src.connect(this.scriptProcessor);
-    this.scriptProcessor.connect(this.audioCtx.destination);
-  }
-
-  private stopCapture(): void {
-    if (this.scriptProcessor) {
-      this.scriptProcessor.disconnect();
-      this.scriptProcessor.onaudioprocess = null;
-      this.scriptProcessor = null;
-    }
-    if (this.mediaStream) {
-      this.mediaStream.getTracks().forEach(t => t.stop());
-      this.mediaStream = null;
-    }
-    this.stopSTTFallback();
-  }
-
-  // ── STT Fallback (sends text when audio processing isn't handled server-side) ──
-
-  private startSTTFallback(): void {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) return;
+    if (!SR) {
+      this.callbacks.onError('Speech recognition not supported. Use Chrome.');
+      return;
+    }
 
-    this.useSTTFallback = true;
+    if (this.recognition) return; // Already running
+
     this.recognition = new SR();
     this.recognition.continuous = true;
     this.recognition.interimResults = false;
     this.recognition.lang = 'en-US';
-
-    let pendingText = '';
-    let sendTimer: any = null;
 
     this.recognition.onresult = (event: any) => {
       const last = event.results[event.results.length - 1];
       if (last.isFinal) {
         const text = last[0].transcript.trim();
         if (text) {
-          // Accumulate text — user might still be talking
-          pendingText += (pendingText ? ' ' : '') + text;
-
-          // Reset the send timer — wait 2.5 seconds of silence before sending
-          if (sendTimer) clearTimeout(sendTimer);
-          sendTimer = setTimeout(() => {
-            if (pendingText && this.ws && this.ws.readyState === WebSocket.OPEN) {
-              this.ws.send(JSON.stringify({ type: 'transcript_input', text: pendingText }));
-              pendingText = '';
-            }
-          }, 2500);
+          this.pendingText += (this.pendingText ? ' ' : '') + text;
+          // Reset 5-second timer
+          if (this.sendTimer) clearTimeout(this.sendTimer);
+          this.sendTimer = setTimeout(() => this.flushPendingText(), 5000);
         }
       }
     };
 
-    this.recognition.onend = () => {
-      // If there's pending text and we stopped, send it now
-      if (pendingText && this.ws && this.ws.readyState === WebSocket.OPEN) {
-        if (sendTimer) clearTimeout(sendTimer);
-        this.ws.send(JSON.stringify({ type: 'transcript_input', text: pendingText }));
-        pendingText = '';
-      }
-      if (this.status === 'live' && this.useSTTFallback) {
-        try { this.recognition.start(); } catch { /* ignore */ }
+    this.recognition.onerror = (event: any) => {
+      if (event.error !== 'no-speech' && event.error !== 'aborted') {
+        console.warn('STT error:', event.error);
       }
     };
 
-    try { this.recognition.start(); } catch { /* ignore */ }
+    this.recognition.onend = () => {
+      this.recognition = null;
+      // Restart if we should still be listening
+      if (this.status === 'live' && !this.isMuted && !this.isPlaying) {
+        setTimeout(() => this.startSTT(), 300);
+      }
+    };
+
+    try {
+      this.recognition.start();
+    } catch { /* ignore - might already be started */ }
   }
 
-  private stopSTTFallback(): void {
-    this.useSTTFallback = false;
+  private stopSTT(): void {
     if (this.recognition) {
       try { this.recognition.abort(); } catch { /* ignore */ }
       this.recognition = null;
+    }
+  }
+
+  private flushPendingText(): void {
+    if (this.sendTimer) { clearTimeout(this.sendTimer); this.sendTimer = null; }
+    if (this.pendingText && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'transcript_input', text: this.pendingText }));
+      this.pendingText = '';
     }
   }
 
@@ -263,7 +223,10 @@ export class VoiceClient {
   private playAudioChunk(b64: string): void {
     if (!this.audioCtx) return;
 
-    const int16 = this.base64ToInt16Array(b64);
+    const binary = atob(b64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    const int16 = new Int16Array(bytes.buffer);
     const float32 = new Float32Array(int16.length);
     for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
 
@@ -282,40 +245,33 @@ export class VoiceClient {
     this.scheduledSources.push(source);
     source.onended = () => {
       this.scheduledSources = this.scheduledSources.filter(s => s !== source);
+      // When all audio finished playing, resume STT
+      if (this.scheduledSources.length === 0) {
+        this.isPlaying = false;
+        // Wait 1 second after audio ends before listening
+        setTimeout(() => {
+          if (this.status === 'live' && !this.isMuted) {
+            this.startSTT();
+          }
+        }, 1000);
+      }
     };
+  }
+
+  private clearAudioQueue(): void {
+    for (const s of this.scheduledSources) {
+      try { s.stop(); } catch { /* ignore */ }
+    }
+    this.scheduledSources = [];
+    this.nextPlayTime = 0;
+    this.isPlaying = false;
   }
 
   // ── Utilities ──
 
-  private downsample(buf: Float32Array, fromRate: number, toRate: number): Float32Array {
-    if (fromRate === toRate) return buf;
-    const ratio = fromRate / toRate;
-    const out = new Float32Array(Math.floor(buf.length / ratio));
-    for (let i = 0; i < out.length; i++) out[i] = buf[Math.floor(i * ratio)];
-    return out;
-  }
-
-  private float32ToInt16(float32: Float32Array): Int16Array {
-    const int16 = new Int16Array(float32.length);
-    for (let i = 0; i < float32.length; i++) {
-      const x = Math.max(-1, Math.min(1, float32[i]));
-      int16[i] = x < 0 ? x * 0x8000 : x * 0x7FFF;
-    }
-    return int16;
-  }
-
-  private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer);
-    let binary = '';
-    for (let i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
-    return btoa(binary);
-  }
-
-  private base64ToInt16Array(b64: string): Int16Array {
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return new Int16Array(bytes.buffer);
+  private getWsUrl(): string {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws/call`;
   }
 
   private setStatus(status: VoiceStatus): void {
@@ -324,19 +280,11 @@ export class VoiceClient {
   }
 
   private cleanup(): void {
-    this.stopCapture();
-    for (const s of this.scheduledSources) {
-      try { s.stop(); } catch { /* ignore */ }
-    }
-    this.scheduledSources = [];
-    this.nextPlayTime = 0;
-    if (this.audioCtx) {
-      this.audioCtx.close();
-      this.audioCtx = null;
-    }
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    this.stopSTT();
+    this.clearAudioQueue();
+    if (this.sendTimer) { clearTimeout(this.sendTimer); this.sendTimer = null; }
+    if (this.audioCtx) { this.audioCtx.close(); this.audioCtx = null; }
+    if (this.ws) { this.ws.close(); this.ws = null; }
+    this.pendingText = '';
   }
 }

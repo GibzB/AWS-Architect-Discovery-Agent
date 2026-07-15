@@ -12,7 +12,6 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routes.sessions import router as sessions_router
-from app.routes.voice import router as voice_router
 from app.routes.voice_ws import router as voice_ws_router
 
 app = FastAPI(
@@ -39,5 +38,4 @@ async def health():
 
 # Register API routes
 app.include_router(sessions_router, prefix="/v1")
-app.include_router(voice_router)
 app.include_router(voice_ws_router)
