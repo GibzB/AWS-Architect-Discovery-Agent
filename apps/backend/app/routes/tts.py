@@ -1,4 +1,4 @@
-"""Text-to-Speech endpoint — returns Polly audio as MP3 for natural voice."""
+"""Text-to-Speech endpoint — Amazon Polly Neural for human-like voice."""
 
 import logging
 
@@ -17,22 +17,20 @@ router = APIRouter()
 async def text_to_speech(text: str, voice: str = "Matthew"):
     """Convert text to speech using Amazon Polly Neural engine.
     
-    Returns MP3 audio that can be played directly by the browser.
-    Voices: Matthew (male), Joanna (female), Stephen (male UK), Ruth (female UK)
+    Returns MP3 audio for natural human-like voice.
     """
     try:
         polly = boto3.client("polly", region_name=settings.aws_region)
         
-        # Use SSML for more natural speech
-        ssml_text = f'<speak><prosody rate="medium" pitch="medium">{_escape_ssml(text[:3000])}</prosody></speak>'
+        # Clean markdown from text
+        clean = text.replace("**", "").replace("---", "").replace("#", "").replace("`", "").replace("*", "")
         
         response = polly.synthesize_speech(
-            Text=ssml_text,
-            TextType="ssml",
+            Text=clean[:3000],
+            TextType="text",
             OutputFormat="mp3",
             VoiceId=voice,
             Engine="neural",
-            SampleRate="24000",
         )
         
         audio_bytes = response["AudioStream"].read()
@@ -48,12 +46,3 @@ async def text_to_speech(text: str, voice: str = "Matthew"):
     except Exception as e:
         logger.error(f"Polly TTS failed: {e}")
         return Response(content=b"", status_code=500)
-
-
-def _escape_ssml(text: str) -> str:
-    """Escape special chars for SSML and clean markdown."""
-    text = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    text = text.replace('"', "&quot;").replace("'", "&apos;")
-    # Remove markdown formatting
-    text = text.replace("**", "").replace("---", "").replace("#", "").replace("`", "")
-    return text
