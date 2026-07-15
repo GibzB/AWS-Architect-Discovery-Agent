@@ -20,20 +20,21 @@ async def text_to_speech(text: str, voice: str = "Matthew"):
     Returns MP3 audio for natural human-like voice.
     """
     try:
-        polly = boto3.client("polly", region_name=settings.aws_region)
+        import asyncio
         
-        # Clean markdown from text
-        clean = text.replace("**", "").replace("---", "").replace("#", "").replace("`", "").replace("*", "")
+        def _synthesize():
+            polly = boto3.client("polly", region_name=settings.aws_region)
+            clean = text.replace("**", "").replace("---", "").replace("#", "").replace("`", "").replace("*", "")
+            response = polly.synthesize_speech(
+                Text=clean[:3000],
+                TextType="text",
+                OutputFormat="mp3",
+                VoiceId=voice,
+                Engine="neural",
+            )
+            return response["AudioStream"].read()
         
-        response = polly.synthesize_speech(
-            Text=clean[:3000],
-            TextType="text",
-            OutputFormat="mp3",
-            VoiceId=voice,
-            Engine="neural",
-        )
-        
-        audio_bytes = response["AudioStream"].read()
+        audio_bytes = await asyncio.to_thread(_synthesize)
         
         return Response(
             content=audio_bytes,
@@ -45,4 +46,4 @@ async def text_to_speech(text: str, voice: str = "Matthew"):
         )
     except Exception as e:
         logger.error(f"Polly TTS failed: {e}")
-        return Response(content=b"", status_code=500)
+        return Response(content=str(e).encode(), media_type="text/plain", status_code=500)
