@@ -45,8 +45,8 @@ class Orchestrator:
             f"My role is to understand your business objectives, identify technical constraints, "
             f"evaluate risks, and work with my specialist colleagues to produce an "
             f"implementation-ready architecture.\n\n"
-            f"Let's begin. Can you tell me about your organisation and what's driving "
-            f"this cloud initiative?"
+            f"To get started — tell me what your company does, who your users are, "
+            f"and what's driving this cloud initiative."
         )
         memory_store.add_message(session_id, "assistant", intro)
 

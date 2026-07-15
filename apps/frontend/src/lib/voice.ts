@@ -161,36 +161,49 @@ export class VoiceClient {
     }
   }
 
-  // ── Text-to-Speech ──
+  // ── Text-to-Speech (Amazon Polly via backend) ──
 
   private speak(text: string): Promise<void> {
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       this.speaking = true;
       this.stopSTT();
-      window.speechSynthesis.cancel();
 
+      try {
+        // Call Polly TTS endpoint — returns MP3 audio
+        const apiBase = (import.meta as any).env?.VITE_API_URL || 'https://tdj9q54rxg.execute-api.eu-west-1.amazonaws.com/v1';
+        const baseUrl = apiBase.replace('/v1', '');
+        const encoded = encodeURIComponent(text.slice(0, 2000));
+        const response = await fetch(`${baseUrl}/v1/tts?text=${encoded}&voice=Matthew`);
+        
+        if (response.ok) {
+          const audioBlob = await response.blob();
+          const audioUrl = URL.createObjectURL(audioBlob);
+          const audio = new Audio(audioUrl);
+          
+          audio.onended = () => {
+            URL.revokeObjectURL(audioUrl);
+            this.speaking = false;
+            resolve();
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(audioUrl);
+            this.speaking = false;
+            resolve();
+          };
+          
+          await audio.play();
+          return;
+        }
+      } catch (e) {
+        console.warn('Polly TTS failed, falling back to browser speech:', e);
+      }
+
+      // Fallback to browser speech synthesis if Polly fails
       const clean = text.replace(/\*\*([^*]+)\*\*/g, '$1').replace(/---/g, '').replace(/\n+/g, '. ').replace(/[#*`]/g, '');
       const utterance = new SpeechSynthesisUtterance(clean);
       utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-
-      // Prefer a natural voice
-      const voices = window.speechSynthesis.getVoices();
-      const preferred = voices.find(v =>
-        v.name.includes('Daniel') || v.name.includes('Google UK English Male') ||
-        v.name.includes('Samantha') || v.name.includes('Alex')
-      );
-      if (preferred) utterance.voice = preferred;
-
-      utterance.onend = () => {
-        this.speaking = false;
-        resolve();
-      };
-      utterance.onerror = () => {
-        this.speaking = false;
-        resolve();
-      };
-
+      utterance.onend = () => { this.speaking = false; resolve(); };
+      utterance.onerror = () => { this.speaking = false; resolve(); };
       window.speechSynthesis.speak(utterance);
     });
   }

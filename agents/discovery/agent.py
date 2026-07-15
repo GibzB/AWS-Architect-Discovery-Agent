@@ -149,38 +149,44 @@ class DiscoveryAgent(BaseAgent):
         questions = []
         if "business" not in fact_categories:
             questions.append({
-                "question": "Can you tell me about your business? What industry are you in, and what's your company size?",
+                "question": "What does your company do, and who are your primary users? I'd also like to understand your team size and current growth stage.",
                 "category": "business",
                 "reason": "Need to understand business context for architecture decisions",
                 "priority": "critical",
             })
-        if "technical" not in fact_categories:
+        elif "technical" not in fact_categories:
             questions.append({
-                "question": "What does your current technical architecture look like? What languages, databases, and infrastructure do you use?",
+                "question": "What does your current technical stack look like? I'm interested in languages, frameworks, databases, and where you're hosting today.",
                 "category": "technical",
-                "reason": "Need to understand current state to recommend migration path",
+                "reason": "Need to understand current state to recommend the right AWS services",
                 "priority": "critical",
             })
-        if "compliance" not in fact_categories:
+        elif "compliance" not in fact_categories:
             questions.append({
-                "question": "Are there any regulatory or compliance requirements I should be aware of? (HIPAA, PCI-DSS, GDPR, SOC2, etc.)",
+                "question": "Are there any regulatory or compliance requirements — things like GDPR, HIPAA, PCI-DSS, or data residency rules I should design around?",
                 "category": "compliance",
                 "reason": "Compliance requirements significantly impact architecture choices",
                 "priority": "important",
             })
-
-        if not questions:
+        elif "operations" not in fact_categories:
             questions.append({
-                "question": "What are your availability and disaster recovery objectives? Specifically, what downtime is acceptable (RTO) and how much data can you afford to lose (RPO)?",
+                "question": "What are your availability expectations? Specifically: what uptime do your users expect, and how much data loss is acceptable in a disaster scenario?",
                 "category": "operations",
                 "reason": "DR objectives drive multi-region and backup architecture decisions",
                 "priority": "important",
+            })
+        else:
+            questions.append({
+                "question": "Is there anything else about your infrastructure needs, security concerns, or budget constraints I should factor into the architecture?",
+                "category": "technical",
+                "reason": "Catch remaining requirements before architecture design",
+                "priority": "nice_to_have",
             })
 
         return {
             "facts_extracted": [],
             "questions": questions,
-            "gaps_remaining": ["business context", "technical architecture", "compliance", "DR objectives"],
-            "sufficient_for_architecture": False,
+            "gaps_remaining": [c for c in ["business", "technical", "compliance", "operations"] if c not in fact_categories],
+            "sufficient_for_architecture": len(fact_categories) >= 4,
             "response_to_customer": questions[0]["question"],
         }
