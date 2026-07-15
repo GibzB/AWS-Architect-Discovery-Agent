@@ -113,9 +113,17 @@ export class VoiceClient {
         break;
       case 'audio':
         this.playAudioChunk(msg.data);
+        // Pause STT while agent is speaking to avoid capturing playback
+        this.stopSTTFallback();
         break;
       case 'transcript':
         this.callbacks.onTranscript(msg.role, msg.text);
+        // After agent transcript, wait for audio to finish then restart STT
+        if (msg.role === 'agent') {
+          setTimeout(() => {
+            if (this.status === 'live') this.startSTTFallback();
+          }, 3000);
+        }
         break;
       case 'digest':
         this.callbacks.onDigest(msg.data);
@@ -204,17 +212,36 @@ export class VoiceClient {
     this.recognition.interimResults = false;
     this.recognition.lang = 'en-US';
 
+    let pendingText = '';
+    let sendTimer: any = null;
+
     this.recognition.onresult = (event: any) => {
       const last = event.results[event.results.length - 1];
       if (last.isFinal) {
         const text = last[0].transcript.trim();
-        if (text && this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.send(JSON.stringify({ type: 'transcript_input', text }));
+        if (text) {
+          // Accumulate text — user might still be talking
+          pendingText += (pendingText ? ' ' : '') + text;
+
+          // Reset the send timer — wait 2.5 seconds of silence before sending
+          if (sendTimer) clearTimeout(sendTimer);
+          sendTimer = setTimeout(() => {
+            if (pendingText && this.ws && this.ws.readyState === WebSocket.OPEN) {
+              this.ws.send(JSON.stringify({ type: 'transcript_input', text: pendingText }));
+              pendingText = '';
+            }
+          }, 2500);
         }
       }
     };
 
     this.recognition.onend = () => {
+      // If there's pending text and we stopped, send it now
+      if (pendingText && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        if (sendTimer) clearTimeout(sendTimer);
+        this.ws.send(JSON.stringify({ type: 'transcript_input', text: pendingText }));
+        pendingText = '';
+      }
       if (this.status === 'live' && this.useSTTFallback) {
         try { this.recognition.start(); } catch { /* ignore */ }
       }
