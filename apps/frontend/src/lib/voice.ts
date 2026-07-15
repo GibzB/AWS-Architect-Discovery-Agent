@@ -101,13 +101,9 @@ export class VoiceClient {
   }
 
   private getWsUrl(): string {
-    const host = window.location.hostname;
-    if (host === 'localhost' || host === '127.0.0.1') {
-      return `ws://${window.location.host}/ws/call`;
-    }
-    // Production: connect to local backend (user must be running it)
-    // This is for the hackathon demo
-    return `ws://localhost:8000/ws/call`;
+    // Always connect through the same host (Vite proxy handles in dev)
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.host}/ws/call`;
   }
 
   private handleMessage(msg: { type: string; [key: string]: any }): void {
