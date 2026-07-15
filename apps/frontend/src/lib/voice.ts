@@ -270,8 +270,13 @@ export class VoiceClient {
   // ── Utilities ──
 
   private getWsUrl(): string {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    return `${protocol}//${window.location.host}/ws/call`;
+    // Use EC2 backend for WebSocket (supports persistent connections)
+    const host = window.location.hostname;
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return `ws://${window.location.host}/ws/call`;
+    }
+    // Production: EC2 backend
+    return 'ws://3.250.218.142:8000/ws/call';
   }
 
   private setStatus(status: VoiceStatus): void {
