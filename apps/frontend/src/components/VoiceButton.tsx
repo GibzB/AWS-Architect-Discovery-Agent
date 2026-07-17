@@ -39,51 +39,37 @@ export function VoiceButton({ sessionId, onTranscript }: VoiceButtonProps) {
     }
   }, []);
 
-  const isActive = status === 'live' || status === 'connecting';
-  const isProcessing = status === 'processing';
+  const isActive = status === 'live' || status === 'connecting' || status === 'processing';
 
-  // Idle / Error / Done state — show start button
-  if (!isActive && !isProcessing) {
+  // Idle / Error / Done state
+  if (!isActive) {
     return (
       <div className="flex flex-col items-center gap-1">
         <button
           onClick={handleStart}
           className="flex items-center gap-2 px-3 py-2.5 rounded-[12px] border border-border
-            bg-surface-light hover:border-primary/30 transition-all duration-200"
+            bg-surface-light hover:border-primary/30 hover:bg-primary/5 transition-all duration-200"
           title="Start voice conversation"
         >
-          <svg className="w-4 h-4 text-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg className="w-4 h-4 text-primary" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <rect x="9" y="2" width="6" height="11" rx="3" />
             <path d="M5 10a7 7 0 0014 0" />
             <line x1="12" y1="19" x2="12" y2="22" />
           </svg>
-          <span className="text-xs font-medium text-muted">Voice</span>
+          <span className="text-xs font-medium text-text-secondary">Voice</span>
         </button>
         {error && <p className="text-[10px] text-danger max-w-[180px] text-center">{error}</p>}
       </div>
     );
   }
 
-  // Processing state
-  if (isProcessing) {
-    return (
-      <div className="flex items-center gap-2 px-3 py-2.5 rounded-[12px] border border-border bg-surface-light">
-        <svg className="w-4 h-4 text-primary animate-spin" viewBox="0 0 24 24" fill="none">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
-        <span className="text-xs font-medium text-muted">Processing...</span>
-      </div>
-    );
-  }
-
-  // Live / Connecting state — show mute + hangup
+  // Active state — show controls + status
   return (
     <div className="flex items-center gap-2">
-      {/* Mute button */}
+      {/* Mute */}
       <button
         onClick={handleMute}
-        className={`flex items-center gap-1.5 px-3 py-2.5 rounded-[12px] border transition-all duration-200 text-xs font-medium
+        className={`flex items-center gap-1.5 px-3 py-2 rounded-[10px] border transition-all text-xs font-medium
           ${muted
             ? 'border-warning/40 bg-warning/10 text-warning'
             : 'border-border bg-surface-light text-muted hover:border-primary/30'
@@ -92,27 +78,46 @@ export function VoiceButton({ sessionId, onTranscript }: VoiceButtonProps) {
         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="9" y="2" width="6" height="11" rx="3" />
           <path d="M5 10a7 7 0 0014 0" />
-          {muted && <line x1="3" y1="3" x2="21" y2="21" />}
+          {muted && <line x1="3" y1="3" x2="21" y2="21" strokeWidth="2.5" />}
         </svg>
         {muted ? 'Unmute' : 'Mute'}
       </button>
 
-      {/* Live indicator */}
-      <div className="flex items-center gap-1.5 px-2">
-        <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
-        <span className="text-[10px] text-success font-medium">LIVE</span>
+      {/* Status indicator */}
+      <div className="flex items-center gap-1.5 px-2 py-2">
+        {status === 'connecting' && (
+          <>
+            <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+            <span className="text-[10px] text-warning font-medium">Connecting</span>
+          </>
+        )}
+        {status === 'live' && (
+          <>
+            <span className="w-2 h-2 rounded-full bg-success animate-pulse" />
+            <span className="text-[10px] text-success font-medium">Listening</span>
+          </>
+        )}
+        {status === 'processing' && (
+          <>
+            <svg className="w-3 h-3 text-info animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z" />
+            </svg>
+            <span className="text-[10px] text-info font-medium">Thinking</span>
+          </>
+        )}
       </div>
 
-      {/* Hangup button */}
+      {/* Hangup */}
       <button
         onClick={handleHangup}
-        className="flex items-center gap-1.5 px-3 py-2.5 rounded-[12px] border border-danger/30
-          bg-danger/10 text-danger hover:bg-danger/20 transition-all duration-200 text-xs font-medium"
+        className="flex items-center gap-1.5 px-3 py-2 rounded-[10px] border border-danger/30
+          bg-danger/10 text-danger hover:bg-danger/20 transition-all text-xs font-medium"
       >
-        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+        <svg className="w-3.5 h-3.5" viewBox="0 0 20 20" fill="currentColor">
           <path d="M2 3.5A1.5 1.5 0 013.5 2h1.148a1.5 1.5 0 011.465 1.175l.716 3.223a1.5 1.5 0 01-1.052 1.767l-.933.267c-.41.117-.643.555-.48.95a11.542 11.542 0 006.254 6.254c.395.163.833-.07.95-.48l.267-.933a1.5 1.5 0 011.767-1.052l3.223.716A1.5 1.5 0 0118 15.352V16.5a1.5 1.5 0 01-1.5 1.5H15c-1.149 0-2.263-.15-3.326-.43A13.022 13.022 0 012.43 8.326 13.019 13.019 0 012 5V3.5z"/>
         </svg>
-        Hang Up
+        End
       </button>
     </div>
   );

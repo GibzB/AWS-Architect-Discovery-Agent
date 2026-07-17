@@ -10,7 +10,7 @@ from agents.planner.agent import PlannerAgent
 from agents.discovery.agent import DiscoveryAgent
 from agents.architect.agent import ArchitectAgent
 from agents.review.agent import ReviewAgent
-from app.services.memory_store import memory_store
+from app.services.dynamodb_store import dynamodb_store as memory_store
 from app.services.report_service import report_service
 
 logger = logging.getLogger(__name__)

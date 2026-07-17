@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import type { ReportResponse } from '../lib/api';
 
+function downloadFile(content: string, filename: string, mimeType: string) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 interface ReportViewProps {
   report: ReportResponse;
 }
@@ -27,11 +37,27 @@ export function ReportView({ report }: ReportViewProps) {
             <p className="text-xs text-muted">{report.executive_summary}</p>
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap items-center">
           <Badge label="Approved" color="success" />
           <Badge label={`${report.services.length} Services`} color="info" />
           <Badge label={`${report.risks.length} Risks`} color="warning" />
           <Badge label="Terraform Ready" color="info" />
+          <div className="ml-auto flex gap-2">
+            <button
+              onClick={() => downloadFile(report.report_markdown, 'asa-discovery-report.md', 'text/markdown')}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border
+                text-muted hover:text-text hover:border-primary/30 transition-colors"
+            >
+              ↓ Markdown
+            </button>
+            <button
+              onClick={() => downloadFile(report.terraform_snippet, 'architecture.tf', 'text/plain')}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-medium border border-border
+                text-muted hover:text-text hover:border-primary/30 transition-colors"
+            >
+              ↓ Terraform
+            </button>
+          </div>
         </div>
       </div>
 

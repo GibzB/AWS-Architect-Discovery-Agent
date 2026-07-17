@@ -175,13 +175,24 @@ export function Workshop({ sessionId, onReset }: WorkshopProps) {
                   <ChatMessage key={msg.id} message={msg} />
                 ))}
                 {loading && (
-                  <div className="flex items-center gap-2 text-muted text-sm pl-12">
-                    <div className="flex gap-1">
-                      <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                  <div className="flex items-start gap-3 pl-0">
+                    <div className="flex-none w-8 h-8 rounded-lg flex items-center justify-center border bg-surface border-border">
+                      <svg className="w-4 h-4 text-primary animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                        <path d="M2 17l10 5 10-5" />
+                        <path d="M2 12l10 5 10-5" />
+                      </svg>
                     </div>
-                    <span>ASA is thinking...</span>
+                    <div className="bg-surface border border-border rounded-[12px] px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex gap-1">
+                          <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-1.5 h-1.5 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                        <span className="text-xs text-muted">ASA is analysing...</span>
+                      </div>
+                    </div>
                   </div>
                 )}
                 <div ref={messagesEndRef} />

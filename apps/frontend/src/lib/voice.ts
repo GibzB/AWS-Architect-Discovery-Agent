@@ -106,9 +106,9 @@ export class VoiceClient {
         const text = last[0].transcript.trim();
         if (text) {
           this.pendingText += (this.pendingText ? ' ' : '') + text;
-          // 5 second debounce
+          // 3 second debounce — fast enough to feel responsive, long enough for pauses
           if (this.sendTimer) clearTimeout(this.sendTimer);
-          this.sendTimer = setTimeout(() => this.flushPendingText(), 5000);
+          this.sendTimer = setTimeout(() => this.flushPendingText(), 3000);
         }
       }
     };
