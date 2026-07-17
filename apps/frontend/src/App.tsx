@@ -47,7 +47,6 @@ function App() {
   const sessionRef = useRef<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const pendingTextRef = useRef('');
-  const sendTimerRef = useRef<any>(null);
   const speakingRef = useRef(false);
 
   const updateState = (s: AppState) => { stateRef.current = s; setState(s); };
@@ -121,6 +120,9 @@ function App() {
     }
   }, []);
 
+  const lastSpeechTimeRef = useRef<number>(0);
+  const silenceCheckRef = useRef<any>(null);
+
   // STT
   const startListening = useCallback(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -136,6 +138,9 @@ function App() {
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: any) => {
+      // ANY result (interim or final) means user is still talking
+      lastSpeechTimeRef.current = Date.now();
+
       let interim = '';
       let finalText = '';
 
@@ -156,15 +161,26 @@ function App() {
       if (finalText.trim()) {
         pendingTextRef.current += (pendingTextRef.current ? ' ' : '') + finalText.trim();
         setPendingDisplay(pendingTextRef.current);
+      }
 
-        // Reset 5-second timer on each final result
-        if (sendTimerRef.current) clearTimeout(sendTimerRef.current);
-        sendTimerRef.current = setTimeout(() => flushText(), 5000);
+      // Start/restart the silence checker (polls every 500ms)
+      if (!silenceCheckRef.current) {
+        silenceCheckRef.current = setInterval(() => {
+          const silenceMs = Date.now() - lastSpeechTimeRef.current;
+          if (silenceMs >= 5000 && pendingTextRef.current) {
+            // 5 seconds of silence — user is done talking
+            clearInterval(silenceCheckRef.current);
+            silenceCheckRef.current = null;
+            flushText();
+          }
+        }, 500);
       }
     };
 
     recognition.onend = () => {
       recognitionRef.current = null;
+      // If there's pending text and recognition ended (e.g. network timeout),
+      // wait the full 5 seconds of silence before flushing
       if (stateRef.current === 'live' && !speakingRef.current) {
         setTimeout(() => startListening(), 300);
       }
@@ -175,6 +191,7 @@ function App() {
     try {
       recognition.start();
       recognitionRef.current = recognition;
+      lastSpeechTimeRef.current = Date.now(); // reset on start
     } catch {}
   }, []);
 
@@ -184,10 +201,14 @@ function App() {
       try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
     }
+    if (silenceCheckRef.current) {
+      clearInterval(silenceCheckRef.current);
+      silenceCheckRef.current = null;
+    }
   }, []);
 
   const flushText = useCallback(async () => {
-    if (sendTimerRef.current) { clearTimeout(sendTimerRef.current); sendTimerRef.current = null; }
+    if (silenceCheckRef.current) { clearInterval(silenceCheckRef.current); silenceCheckRef.current = null; }
     if (!pendingTextRef.current || !sessionRef.current) return;
 
     const text = pendingTextRef.current;
@@ -273,7 +294,6 @@ function App() {
     speakingRef.current = false;
 
     stopListening();
-    if (sendTimerRef.current) { clearTimeout(sendTimerRef.current); sendTimerRef.current = null; }
     pendingTextRef.current = '';
     setPendingDisplay('');
     setWaveActive(false);
