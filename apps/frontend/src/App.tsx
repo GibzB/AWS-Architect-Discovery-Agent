@@ -54,44 +54,54 @@ function App() {
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // TTS via Polly
-  const speak = useCallback(async (text: string): Promise<void> => {
-    speakingRef.current = true;
-    setWaveActive(true);
-    setMicGlow(false);
-    setStatusText('ASA is speaking...');
-
+  // Fetch TTS audio from Polly (returns prepared HTMLAudioElement or falls back to browser TTS)
+  const fetchTTS = useCallback(async (text: string): Promise<HTMLAudioElement | 'browser-fallback'> => {
     try {
       const apiBase = (import.meta as any).env?.VITE_API_URL || 'https://tdj9q54rxg.execute-api.eu-west-1.amazonaws.com/v1';
       const baseUrl = apiBase.replace('/v1', '');
       const encoded = encodeURIComponent(text.slice(0, 2000));
       const response = await fetch(`${baseUrl}/v1/tts?text=${encoded}&voice=Matthew`);
 
-      if (response.ok && stateRef.current === 'live') {
+      if (response.ok) {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
-        audioRef.current = audio;
-        await new Promise<void>((resolve) => {
-          audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; resolve(); };
-          audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; resolve(); };
-          // Check if we're still live before playing
-          if (stateRef.current !== 'live') { URL.revokeObjectURL(url); resolve(); return; }
-          audio.play().catch(() => { URL.revokeObjectURL(url); resolve(); });
-        });
-      } else if (stateRef.current === 'live') {
-        throw new Error('TTS failed');
+        // Store the object URL on the element for cleanup
+        (audio as any)._objectUrl = url;
+        return audio;
+      } else {
+        return 'browser-fallback';
       }
     } catch {
-      if (stateRef.current === 'live') {
-        await new Promise<void>((resolve) => {
-          const u = new SpeechSynthesisUtterance(text);
-          u.rate = 1.0;
-          u.onend = () => resolve();
-          u.onerror = () => resolve();
-          window.speechSynthesis.speak(u);
-        });
-      }
+      return 'browser-fallback';
+    }
+  }, []);
+
+  // Play a prepared audio element (or browser fallback)
+  const playAudio = useCallback(async (audio: HTMLAudioElement | 'browser-fallback', text: string): Promise<void> => {
+    speakingRef.current = true;
+    setWaveActive(true);
+    setMicGlow(false);
+    setStatusText('ASA is speaking...');
+
+    if (audio !== 'browser-fallback' && stateRef.current === 'live') {
+      const url = (audio as any)._objectUrl as string | undefined;
+      audioRef.current = audio;
+      await new Promise<void>((resolve) => {
+        audio.onended = () => { if (url) URL.revokeObjectURL(url); audioRef.current = null; resolve(); };
+        audio.onerror = () => { if (url) URL.revokeObjectURL(url); audioRef.current = null; resolve(); };
+        if (stateRef.current !== 'live') { if (url) URL.revokeObjectURL(url); audioRef.current = null; resolve(); return; }
+        audio.play().catch(() => { if (url) URL.revokeObjectURL(url); audioRef.current = null; resolve(); });
+      });
+    } else if (stateRef.current === 'live') {
+      // Browser speechSynthesis fallback
+      await new Promise<void>((resolve) => {
+        const u = new SpeechSynthesisUtterance(text);
+        u.rate = 1.0;
+        u.onend = () => resolve();
+        u.onerror = () => resolve();
+        window.speechSynthesis.speak(u);
+      });
     }
 
     speakingRef.current = false;
@@ -192,17 +202,21 @@ function App() {
 
     try {
       const response = await sendMessage(sessionRef.current, text);
+      // Start TTS fetch immediately, before updating UI
+      const audioPromise = fetchTTS(response.content);
       setTranscript(prev => [...prev, { role: 'agent', text: response.content }]);
       setQuestionCount(prev => prev + 1);
       updateState('live');
-      await speak(response.content);
+      // Audio should be ready (or nearly ready) by now
+      const audio = await audioPromise;
+      await playAudio(audio, response.content);
     } catch {
       setStatusText('Connection error. Try speaking again.');
       updateState('live');
       setMicGlow(true);
       startListening();
     }
-  }, [speak, stopListening, startListening]);
+  }, [fetchTTS, playAudio, stopListening, startListening]);
 
   // Start call
   const handleStart = async () => {
@@ -222,7 +236,10 @@ function App() {
 
       const greeting = SCENARIOS[scenario].greeting;
 
-      // Typewriter effect — populate text as ASA speaks
+      // Start TTS fetch immediately (in parallel with typewriter)
+      const audioPromise = fetchTTS(greeting);
+
+      // Typewriter effect — populate text as audio loads
       setTranscript([{ role: 'agent', text: '' }]);
       const words = greeting.split(' ');
       const wordDelay = Math.min(150, 2500 / words.length); // spread across ~2.5s
@@ -235,8 +252,9 @@ function App() {
       // Send scenario context silently to backend
       await sendMessage(session.session_id, `[Context: The customer is ${SCENARIOS[scenario].context}. Tailor questions accordingly.]`);
 
-      // Speak the greeting (audio starts after text is shown)
-      await speak(greeting);
+      // Audio should be fetched by now — play immediately
+      const audio = await audioPromise;
+      await playAudio(audio, greeting);
     } catch {
       updateState('error');
       setStatusText('Could not connect to ASA. Please try again.');
