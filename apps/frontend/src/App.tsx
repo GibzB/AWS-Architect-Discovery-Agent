@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { createSession, sendMessage } from './lib/api';
 import './index.css';
 
@@ -10,45 +10,56 @@ interface TranscriptLine {
   text: string;
 }
 
-const SCENARIOS: Record<Scenario, { name: string; subtitle: string; context: string }> = {
+const SCENARIOS: Record<Scenario, { name: string; subtitle: string; context: string; greeting: string }> = {
   startup: {
     name: 'Startups / Micro',
     subtitle: 'Discover Local Gems',
-    context: 'a startup or micro-business (1-10 employees, early stage, lean budget)',
+    context: 'a startup or micro-business with a lean team and early-stage product',
+    greeting: "Hi there! I'm ASA. I work with startups like yours to design cloud architectures that scale without breaking the bank. Tell me — what does your company do and what are you building?",
   },
   sme: {
-    name: 'Small & Medium Enterprises',
+    name: 'SMEs',
     subtitle: 'Fast Rising Brands',
-    context: 'a small or medium enterprise (10-500 employees, growing revenue, scaling operations)',
+    context: 'a growing SME scaling operations with an established product and expanding team',
+    greeting: "Hello! I'm ASA, your solutions architect. I help growing businesses design scalable, secure cloud platforms. Tell me about your company — what do you do, how big is the team, and what's driving your move to cloud?",
   },
   enterprise: {
-    name: 'Enterprise & Multinational',
+    name: 'Enterprise',
     subtitle: 'Trusted & Established',
-    context: 'a large enterprise or multinational corporation (500+ employees, complex operations, global presence)',
+    context: 'a large enterprise or multinational with complex operations and strict compliance needs',
+    greeting: "Good afternoon. I'm ASA, your solutions architect. I specialise in enterprise cloud transformations with a focus on compliance, resilience, and scalability. Tell me about your organisation and what's driving this initiative.",
   },
 };
 
 function App() {
   const [state, setState] = useState<AppState>('idle');
   const [scenario, setScenario] = useState<Scenario>('startup');
-  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [, setSessionId] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptLine[]>([]);
   const [statusText, setStatusText] = useState('Choose your business category, then talk with ASA.');
   const [waveActive, setWaveActive] = useState(false);
   const [micGlow, setMicGlow] = useState(false);
   const [questionCount, setQuestionCount] = useState(0);
   const [digest, setDigest] = useState<any>(null);
+  const [pendingDisplay, setPendingDisplay] = useState('');
 
+  const stateRef = useRef<AppState>('idle');
+  const sessionRef = useRef<string | null>(null);
   const recognitionRef = useRef<any>(null);
   const pendingTextRef = useRef('');
   const sendTimerRef = useRef<any>(null);
   const speakingRef = useRef(false);
 
+  const updateState = (s: AppState) => { stateRef.current = s; setState(s); };
+
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
   // TTS via Polly
-  const speak = async (text: string): Promise<void> => {
+  const speak = useCallback(async (text: string): Promise<void> => {
     speakingRef.current = true;
     setWaveActive(true);
     setMicGlow(false);
+    setStatusText('ASA is speaking...');
 
     try {
       const apiBase = (import.meta as any).env?.VITE_API_URL || 'https://tdj9q54rxg.execute-api.eu-west-1.amazonaws.com/v1';
@@ -56,67 +67,95 @@ function App() {
       const encoded = encodeURIComponent(text.slice(0, 2000));
       const response = await fetch(`${baseUrl}/v1/tts?text=${encoded}&voice=Matthew`);
 
-      if (response.ok) {
+      if (response.ok && stateRef.current === 'live') {
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
         const audio = new Audio(url);
-
+        audioRef.current = audio;
         await new Promise<void>((resolve) => {
-          audio.onended = () => { URL.revokeObjectURL(url); resolve(); };
-          audio.onerror = () => { URL.revokeObjectURL(url); resolve(); };
-          audio.play();
+          audio.onended = () => { URL.revokeObjectURL(url); audioRef.current = null; resolve(); };
+          audio.onerror = () => { URL.revokeObjectURL(url); audioRef.current = null; resolve(); };
+          // Check if we're still live before playing
+          if (stateRef.current !== 'live') { URL.revokeObjectURL(url); resolve(); return; }
+          audio.play().catch(() => { URL.revokeObjectURL(url); resolve(); });
+        });
+      } else if (stateRef.current === 'live') {
+        throw new Error('TTS failed');
+      }
+    } catch {
+      if (stateRef.current === 'live') {
+        await new Promise<void>((resolve) => {
+          const u = new SpeechSynthesisUtterance(text);
+          u.rate = 1.0;
+          u.onend = () => resolve();
+          u.onerror = () => resolve();
+          window.speechSynthesis.speak(u);
         });
       }
-    } catch (e) {
-      // Fallback to browser TTS
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      await new Promise<void>((resolve) => {
-        utterance.onend = () => resolve();
-        utterance.onerror = () => resolve();
-        window.speechSynthesis.speak(utterance);
-      });
     }
 
     speakingRef.current = false;
     setWaveActive(false);
+    audioRef.current = null;
 
-    // After speaking, wait 2-3 seconds then enable mic (green glow)
-    setTimeout(() => {
-      if (state === 'live') {
-        setMicGlow(true);
-        startListening();
-      }
-    }, 2500);
-  };
+    // 3 second pause then enable mic (only if still live)
+    if (stateRef.current === 'live') {
+      setStatusText('Get ready to speak...');
+      setTimeout(() => {
+        if (stateRef.current === 'live' && !speakingRef.current) {
+          setMicGlow(true);
+          setStatusText('Speak now — mic is active.');
+          startListening();
+        }
+      }, 3000);
+    }
+  }, []);
 
   // STT
-  const startListening = () => {
+  const startListening = useCallback(() => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR || recognitionRef.current) return;
+    if (!SR) {
+      setStatusText('Speech recognition requires Chrome browser.');
+      return;
+    }
+    if (recognitionRef.current) return;
 
     const recognition = new SR();
     recognition.continuous = true;
-    recognition.interimResults = false;
+    recognition.interimResults = true;
     recognition.lang = 'en-US';
 
     recognition.onresult = (event: any) => {
-      const last = event.results[event.results.length - 1];
-      if (last.isFinal) {
-        const text = last[0].transcript.trim();
-        if (text) {
-          pendingTextRef.current += (pendingTextRef.current ? ' ' : '') + text;
-          // Reset 5-second timer
-          if (sendTimerRef.current) clearTimeout(sendTimerRef.current);
-          sendTimerRef.current = setTimeout(() => flushText(), 5000);
+      let interim = '';
+      let finalText = '';
+
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const t = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += t + ' ';
+        } else {
+          interim += t;
         }
+      }
+
+      // Show what user is saying in real-time
+      if (interim) {
+        setPendingDisplay(pendingTextRef.current + ' ' + interim);
+      }
+
+      if (finalText.trim()) {
+        pendingTextRef.current += (pendingTextRef.current ? ' ' : '') + finalText.trim();
+        setPendingDisplay(pendingTextRef.current);
+
+        // Reset 5-second timer on each final result
+        if (sendTimerRef.current) clearTimeout(sendTimerRef.current);
+        sendTimerRef.current = setTimeout(() => flushText(), 5000);
       }
     };
 
     recognition.onend = () => {
       recognitionRef.current = null;
-      // Restart if still live and not speaking
-      if (state === 'live' && !speakingRef.current) {
+      if (stateRef.current === 'live' && !speakingRef.current) {
         setTimeout(() => startListening(), 300);
       }
     };
@@ -127,101 +166,116 @@ function App() {
       recognition.start();
       recognitionRef.current = recognition;
     } catch {}
-  };
+  }, []);
 
-  const stopListening = () => {
+  const stopListening = useCallback(() => {
     setMicGlow(false);
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
     }
-  };
+  }, []);
 
-  const flushText = async () => {
+  const flushText = useCallback(async () => {
     if (sendTimerRef.current) { clearTimeout(sendTimerRef.current); sendTimerRef.current = null; }
-    if (!pendingTextRef.current || !sessionId) return;
+    if (!pendingTextRef.current || !sessionRef.current) return;
 
     const text = pendingTextRef.current;
     pendingTextRef.current = '';
+    setPendingDisplay('');
 
-    // Stop listening while processing
     stopListening();
     setMicGlow(false);
-    setState('processing');
-    setStatusText('ASA is analysing your response...');
+    updateState('processing');
+    setStatusText('ASA is thinking...');
     setTranscript(prev => [...prev, { role: 'user', text }]);
 
     try {
-      const response = await sendMessage(sessionId, text);
+      const response = await sendMessage(sessionRef.current, text);
       setTranscript(prev => [...prev, { role: 'agent', text: response.content }]);
       setQuestionCount(prev => prev + 1);
-      setState('live');
-      setStatusText('ASA is responding...');
+      updateState('live');
       await speak(response.content);
-      setStatusText('Your turn — speak when the mic glows green.');
     } catch {
-      setStatusText('Error getting response. Try again.');
-      setState('live');
+      setStatusText('Connection error. Try speaking again.');
+      updateState('live');
       setMicGlow(true);
       startListening();
     }
-  };
+  }, [speak, stopListening, startListening]);
 
   // Start call
   const handleStart = async () => {
-    setState('connecting');
+    updateState('connecting');
     setStatusText('Connecting to ASA...');
     setTranscript([]);
     setQuestionCount(0);
     setDigest(null);
+    setPendingDisplay('');
 
     try {
       const session = await createSession({ customer_name: 'Voice Session' });
       setSessionId(session.session_id);
+      sessionRef.current = session.session_id;
 
-      setState('live');
-      setStatusText('ASA is greeting you...');
+      updateState('live');
 
-      const greeting = `Good afternoon. I'm ASA, your Autonomous Solutions Architect. I'll guide you through today's cloud discovery workshop. My role is to understand your business objectives, identify technical constraints, evaluate risks, and work with my specialist colleagues to produce an implementation-ready architecture. I understand you're ${SCENARIOS[scenario].context}. Let's begin — tell me what your company does, who your users are, and what's driving this cloud initiative.`;
+      const greeting = SCENARIOS[scenario].greeting;
 
-      setTranscript([{ role: 'agent', text: greeting }]);
+      // Typewriter effect — populate text as ASA speaks
+      setTranscript([{ role: 'agent', text: '' }]);
+      const words = greeting.split(' ');
+      const wordDelay = Math.min(150, 2500 / words.length); // spread across ~2.5s
+      for (let i = 0; i < words.length; i++) {
+        if (stateRef.current !== 'live') break;
+        await new Promise(r => setTimeout(r, wordDelay));
+        setTranscript([{ role: 'agent', text: words.slice(0, i + 1).join(' ') }]);
+      }
 
-      // Also send scenario context to backend
-      await sendMessage(session.session_id, `[System context: The customer is ${SCENARIOS[scenario].context}]`);
+      // Send scenario context silently to backend
+      await sendMessage(session.session_id, `[Context: The customer is ${SCENARIOS[scenario].context}. Tailor questions accordingly.]`);
 
+      // Speak the greeting (audio starts after text is shown)
       await speak(greeting);
-      setStatusText('Your turn — speak when the mic glows green.');
     } catch {
-      setState('error');
+      updateState('error');
       setStatusText('Could not connect to ASA. Please try again.');
     }
   };
 
-  // Hangup
+  // Hangup — immediately stop everything and go back to start
   const handleHangup = () => {
-    stopListening();
-    if (sendTimerRef.current) clearTimeout(sendTimerRef.current);
-    if (pendingTextRef.current) flushText();
+    // Stop all audio immediately
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = '';
+      audioRef.current = null;
+    }
+    window.speechSynthesis.cancel();
+    speakingRef.current = false;
 
-    setState('done');
-    setStatusText('Call ended. Your discovery report is being prepared.');
+    stopListening();
+    if (sendTimerRef.current) { clearTimeout(sendTimerRef.current); sendTimerRef.current = null; }
+    pendingTextRef.current = '';
+    setPendingDisplay('');
     setWaveActive(false);
     setMicGlow(false);
 
-    setDigest({
-      summary: `Discovery session completed with ${questionCount} exchanges. ASA gathered requirements for ${SCENARIOS[scenario].name} architecture.`,
-      highlights: transcript.filter(t => t.role === 'user').map(t => t.text).slice(0, 5),
-      action_items: ['Architecture design in progress', 'Report will be delivered to your email'],
-    });
+    // Reset to idle immediately
+    updateState('idle');
+    setStatusText('Choose your business category, then talk with ASA.');
+    setTranscript([]);
+    setQuestionCount(0);
+    setDigest(null);
   };
 
-  const isIdle = state === 'idle' || state === 'done' || state === 'error';
+  const isIdle = state === 'idle' || state === 'error' || state === 'done';
   const isLive = state === 'live' || state === 'connecting' || state === 'processing';
 
   return (
     <div className="min-h-screen bg-background text-text">
       {/* Header */}
-      <header className="border-b border-border bg-surface/60 backdrop-blur">
+      <header className="border-b border-border bg-surface/60 backdrop-blur sticky top-0 z-10">
         <div className="max-w-3xl mx-auto px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-sm font-bold text-white">A</div>
@@ -239,7 +293,7 @@ function App() {
             {state === 'connecting' && (
               <div className="pulse-ring absolute w-24 h-24 rounded-full border-2 border-brand-500" />
             )}
-            <div className={`w-20 h-20 rounded-full bg-background border-2 flex items-center justify-center transition-all duration-300
+            <div className={`w-20 h-20 rounded-full bg-background border-2 flex items-center justify-center transition-all duration-500
               ${micGlow ? 'mic-active border-success' : 'border-border'}`}>
               <div className={`waveform ${waveActive ? 'active' : ''}`}>
                 {[...Array(7)].map((_, i) => <div key={i} className="waveform-bar" />)}
@@ -248,12 +302,20 @@ function App() {
           </div>
 
           <h2 className="text-lg font-semibold text-text">ASA</h2>
-          <p className="text-muted text-sm mt-0.5 mb-6">Solutions Architect Discovery</p>
+          <p className="text-muted text-sm mt-0.5 mb-4">Solutions Architect Discovery</p>
 
           {/* Status */}
           <p className="text-sm text-text-secondary mb-6">{statusText}</p>
 
-          {/* Scenario Picker (idle) */}
+          {/* Pending speech display (shows what user is saying) */}
+          {pendingDisplay && isLive && (
+            <div className="mb-4 px-4 py-2 bg-info/10 border border-info/20 rounded-xl text-sm text-info text-left">
+              <span className="text-[10px] text-info/60 uppercase font-medium">You're saying:</span>
+              <p className="mt-1">{pendingDisplay}</p>
+            </div>
+          )}
+
+          {/* Scenario Picker (idle only) */}
           {isIdle && !digest && (
             <div className="grid grid-cols-3 gap-3 mb-6 text-left">
               {(Object.entries(SCENARIOS) as [Scenario, typeof SCENARIOS[Scenario]][]).map(([key, val]) => (
@@ -270,7 +332,7 @@ function App() {
             </div>
           )}
 
-          {/* Start Button (idle) */}
+          {/* Start Button */}
           {isIdle && !digest && (
             <button
               onClick={handleStart}
@@ -296,55 +358,55 @@ function App() {
                 </svg>
                 Hang Up
               </button>
-              {/* Question counter */}
               <div className="text-xs text-muted bg-background px-3 py-1.5 rounded-full border border-border">
                 Q{questionCount + 1}
               </div>
             </div>
           )}
 
-          {/* Call ended */}
+          {/* Done state with no digest yet */}
           {state === 'done' && !digest && (
             <div className="inline-flex items-center gap-2 text-muted text-sm px-5 py-2.5 rounded-full border border-border bg-surface-light">
               <svg className="w-4 h-4 text-success" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/>
               </svg>
-              Call ended — preparing your digest
+              Preparing your digest...
             </div>
           )}
         </div>
 
-        {/* Transcript Card */}
+        {/* Transcript */}
         {transcript.length > 0 && (
           <div className="bg-surface border border-border rounded-2xl overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-              <span className="text-xs font-semibold text-muted uppercase tracking-wider">Live Transcript</span>
+              <span className="text-xs font-semibold text-muted uppercase tracking-wider">Transcript</span>
               {isLive && <div className="w-2 h-2 rounded-full bg-danger animate-pulse" />}
             </div>
-            <div className="p-5 space-y-3 max-h-72 overflow-y-auto text-sm">
+            <div className="p-5 space-y-3 max-h-80 overflow-y-auto text-sm">
               {transcript.map((line, i) => (
-                <div key={i} className="flex gap-2">
-                  <span className={`font-medium shrink-0 w-10 text-right ${line.role === 'agent' ? 'transcript-agent' : 'transcript-user'}`}>
+                <div key={i} className="flex gap-3">
+                  <span className={`font-medium shrink-0 w-8 text-right text-[11px] uppercase mt-0.5
+                    ${line.role === 'agent' ? 'text-primary' : 'text-info'}`}>
                     {line.role === 'agent' ? 'ASA' : 'You'}
                   </span>
-                  <span className="transcript-text leading-snug">{line.text}</span>
+                  <span className="text-text-secondary leading-relaxed">{line.text}</span>
                 </div>
               ))}
             </div>
           </div>
         )}
 
-        {/* Digest Card */}
+        {/* Digest */}
         {digest && (
           <div className="space-y-4">
             <div className="bg-surface border border-border rounded-2xl p-6">
-              <h3 className="text-base font-semibold text-text mb-3">Call Summary</h3>
+              <h3 className="text-base font-semibold text-text mb-3">Session Summary</h3>
               <p className="text-sm text-text-secondary leading-relaxed">{digest.summary}</p>
             </div>
 
             {digest.highlights?.length > 0 && (
               <div className="bg-surface border border-border rounded-2xl p-6">
-                <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">Key Points Gathered</h3>
+                <h3 className="text-sm font-semibold text-primary uppercase tracking-wider mb-3">What We Gathered</h3>
                 <ul className="space-y-2 text-sm text-text-secondary">
                   {digest.highlights.map((h: string, i: number) => (
                     <li key={i} className="flex gap-2"><span className="text-primary shrink-0">✦</span>{h}</li>
@@ -366,7 +428,7 @@ function App() {
 
             <div className="text-center pt-2">
               <button
-                onClick={() => { setState('idle'); setDigest(null); setTranscript([]); }}
+                onClick={() => { updateState('idle'); setDigest(null); setTranscript([]); setPendingDisplay(''); }}
                 className="inline-flex items-center gap-2 bg-surface-light hover:bg-border text-text-secondary text-sm px-6 py-2.5 rounded-full border border-border transition-all"
               >
                 Start a new session
