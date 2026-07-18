@@ -42,6 +42,7 @@ function App() {
   const [questionCount, setQuestionCount] = useState(0);
   const [digest, setDigest] = useState<any>(null);
   const [pendingDisplay, setPendingDisplay] = useState('');
+  const [chatInput, setChatInput] = useState('');
 
   const stateRef = useRef<AppState>('idle');
   const sessionRef = useRef<string | null>(null);
@@ -239,6 +240,34 @@ function App() {
     }
   }, [fetchTTS, playAudio, stopListening, startListening]);
 
+  // Send text message via chat input
+  const handleChatSend = async () => {
+    const text = chatInput.trim();
+    if (!text || !sessionRef.current) return;
+
+    setChatInput('');
+    stopListening();
+    setMicGlow(false);
+    updateState('processing');
+    setStatusText('ASA is thinking...');
+    setTranscript(prev => [...prev, { role: 'user', text }]);
+
+    try {
+      const response = await sendMessage(sessionRef.current, text);
+      const audioPromise = fetchTTS(response.content);
+      setTranscript(prev => [...prev, { role: 'agent', text: response.content }]);
+      setQuestionCount(prev => prev + 1);
+      updateState('live');
+      const audio = await audioPromise;
+      await playAudio(audio, response.content);
+    } catch {
+      setStatusText('Connection error. Try again.');
+      updateState('live');
+      setMicGlow(true);
+      startListening();
+    }
+  };
+
   // Start call
   const handleStart = async () => {
     updateState('connecting');
@@ -318,6 +347,11 @@ function App() {
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-brand-600 flex items-center justify-center text-sm font-bold text-white">A</div>
             <span className="font-semibold text-text tracking-tight">ASA</span>
+            {sessionRef.current && (
+              <span className="text-[10px] text-disabled font-mono ml-2">
+                {sessionRef.current.slice(0, 8)}
+              </span>
+            )}
           </div>
           <span className="text-xs text-muted hidden sm:block">Autonomous Solutions Architect</span>
         </div>
@@ -430,6 +464,32 @@ function App() {
                   <span className="text-text-secondary leading-relaxed">{line.text}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        )}
+
+        {/* Chat text input — available during call */}
+        {isLive && (
+          <div className="bg-surface border border-border rounded-2xl p-4">
+            <div className="flex gap-3 items-end">
+              <input
+                type="text"
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleChatSend(); } }}
+                placeholder="Or type your response here..."
+                className="flex-1 px-4 py-2.5 rounded-xl bg-background border border-border text-text text-sm
+                  placeholder:text-disabled focus:outline-none focus:border-primary/40 transition-colors"
+                disabled={state === 'processing'}
+              />
+              <button
+                onClick={handleChatSend}
+                disabled={!chatInput.trim() || state === 'processing'}
+                className="px-4 py-2.5 rounded-xl bg-brand-600 text-white text-sm font-medium
+                  disabled:opacity-30 disabled:cursor-not-allowed hover:bg-brand-500 active:scale-95 transition-all"
+              >
+                Send
+              </button>
             </div>
           </div>
         )}
