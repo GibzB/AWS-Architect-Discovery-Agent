@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routes.sessions import router as sessions_router
 from app.routes.voice_ws import router as voice_ws_router
 from app.routes.tts import router as tts_router
+from app.routes.engagement import router as engagement_router
 
 app = FastAPI(
     title="ASA Discovery API",
@@ -41,3 +42,4 @@ async def health():
 app.include_router(sessions_router, prefix="/v1")
 app.include_router(voice_ws_router)
 app.include_router(tts_router)
+app.include_router(engagement_router)

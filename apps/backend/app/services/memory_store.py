@@ -56,6 +56,8 @@ class MemoryStore:
                 "json_output": {},
             },
             "agent_trace": [],
+            # AWS CDS omnichannel engagement state (populated after report delivery)
+            "engagement": {},
         }
         self._sessions[session_id] = session
         logger.info(f"Session created: {session_id}")
