@@ -1,114 +1,125 @@
-# AWS Discovery Orchestrator
+# AWS CDS Agentic Omnichannel Engagement
 
-An AI-powered conversational engine that runs AWS architecture discovery
-workshops — replacing weeks of manual pre-sales work with a guided, multi-agent
-voice dialogue that produces a professional discovery report.
+An agentic, omnichannel customer-engagement solution built on **AWS Communication
+Developer Services (CDS)**. A voice-driven AWS architecture discovery session
+turns into an ongoing, two-way conversation across **email, SMS, and RCS** — the
+customer gets their report, replies in their own words, and an AI agent picks up
+right where the last message left off.
 
-Powered by **Amazon Bedrock AgentCore Runtime** + **Amazon Nova 2 Sonic** (bidirectional voice)
-+ **Amazon Nova Pro** (report generation).
+Built for the **AWS CDS Agentic AI Partner Hackathon**.
 
-## How It Works
+> CDS is the communications backbone (Amazon SES + AWS End User Messaging);
+> Amazon Bedrock (Nova Sonic + Nova Pro) is the agentic brain.
 
-1. Customer opens the web UI and starts a voice session.
-2. Nova 2 Sonic conducts a real-time voice conversation guided by the Orchestrator prompt.
-3. The discovery interview covers: business context, technical workloads, compliance, and growth.
-4. On hangup, Nova Pro generates a structured discovery report (architecture recommendations, service breakdown, next steps).
-5. The report is stored in DynamoDB and presented in the UI.
+## Why this fits the hackathon
 
-## Architecture
+The brief asks for conversational, two-way, omnichannel engagement where CDS is
+the backbone and agentic AI does the reasoning — explicitly *beyond* OTP and
+rigid chatbots. This project:
 
-Fully serverless — zero cost when idle.
+- **Uses AWS CDS at runtime** — Amazon SES sends the report; AWS End User
+  Messaging (SMS, RCS-ready) sends the interactive follow-up and receives the
+  customer's reply.
+- **Is genuinely two-way and agentic** — an inbound reply is classified by
+  Amazon Bedrock and drives a real action (book a deep-dive, answer a question,
+  escalate to a human), with the agent remembering context across channels.
+- **Is omnichannel by design** — a channel abstraction layer makes SES / SMS /
+  RCS interchangeable, and adding **WhatsApp** (Meta prize) is one new adapter.
 
-```
-Browser (WebSocket) ──► FastAPI / AgentCore Runtime ──► Nova 2 Sonic (bidirectional voice)
-                                    │
-                                    └──► Nova Pro (report generation)
-                                    │
-                                    └──► DynamoDB (session + report storage)
-                                    │
-                                    └──► Bedrock Knowledge Base (RAG - Well-Architected, Landing Zones)
-```
-
-| Component | AWS Service |
-|-----------|------------|
-| Voice conversation | Amazon Nova 2 Sonic (`amazon.nova-2-sonic-v1:0`) |
-| Report generation | Amazon Nova Pro (`amazon.nova-pro-v1:0`) |
-| Agent runtime | Amazon Bedrock AgentCore Runtime |
-| RAG knowledge base | Amazon Bedrock Knowledge Base |
-| Session storage | Amazon DynamoDB |
-| Frontend hosting | Amazon S3 + CloudFront |
-| Presign API | API Gateway + Lambda |
-| IaC | AWS CloudFormation |
-
-## Project Structure
+## How it works
 
 ```
-aws-discovery-orchestrator/
-├── agent/
-│   ├── server.py            # FastAPI WebSocket server (runs in AgentCore)
-│   ├── nova_sonic.py        # Nova 2 Sonic bidirectional stream client
-│   ├── report.py            # Post-session report generation via Nova Pro
-│   ├── prompts/             # System prompts for the discovery agent
-│   │   ├── orchestrator.py  # Main discovery interview prompt
-│   │   └── report.py        # Report generation prompt
-│   ├── Dockerfile
-│   └── requirements.txt
-├── frontend/
-│   ├── index.html
-│   ├── app.js
-│   └── styles.css
-├── infra/
-│   ├── bootstrap.yaml       # CFN: ECR repository (first-time setup)
-│   └── template.yaml        # CFN: full stack (AgentCore, API GW, CloudFront, DDB)
-├── knowledgebase/           # RAG documents (Well-Architected, Landing Zones)
-│   ├── well_architected/
-│   ├── landing_zones/
-│   └── migration/
-├── deploy.sh                # One-command deploy script
-├── ARCHITECTURE.md
-└── DEPLOYMENT.md
+1. Customer has a voice discovery session (Nova Sonic on AgentCore).
+2. Nova Pro generates a structured discovery report.
+3. Amazon SES  → emails the full report.
+4. End User Messaging (SMS/RCS) → sends an interactive follow-up with next steps.
+5. Customer replies in free text.
+6. Inbound Lambda → Amazon Bedrock classifies intent → takes an action →
+   replies on the SAME channel. Conversation state persists in DynamoDB.
 ```
 
-## Prerequisites
+See the full diagram in [`docs/architecture-diagram.md`](docs/architecture-diagram.md)
+and the design in [`docs/DESIGN_CDS.md`](docs/DESIGN_CDS.md).
 
-- AWS CLI configured with a profile
-- Docker with buildx support (or use `--prebuilt`)
-- `jq` installed
-- Amazon Bedrock model access enabled for Nova 2 Sonic and Nova Pro in your region
+## AWS CDS services used
 
-## Quick Start
+| CDS service | Where | boto3 | Call |
+|-------------|-------|-------|------|
+| **Amazon SES** | report delivery | `sesv2` | `send_email` |
+| **AWS End User Messaging (SMS)** | follow-up + two-way | `pinpoint-sms-voice-v2` | `send_text_message` |
+| **AWS End User Messaging (RCS)** | rich follow-up (stub, drop-in) | `pinpoint-sms-voice-v2` | `send_text_message` |
+| **AWS End User Messaging Social (WhatsApp)** | future adapter (Meta prize) | `socialmessaging` | `send_whatsapp_message` |
+
+Supporting AWS services: Amazon Bedrock (Nova Sonic + Nova Pro) on **AgentCore
+Runtime**, AWS Lambda, Amazon SNS (inbound routing), Amazon DynamoDB, Amazon S3 +
+CloudFront, AWS CloudFormation.
+
+## Project structure
+
+```
+agent/
+  channels/            # Channel abstraction layer (CDS adapters)
+    base.py            #   Channel interface + message types
+    ses_adapter.py     #   Amazon SES (email)
+    sms_adapter.py     #   End User Messaging (SMS)
+    rcs_adapter.py     #   End User Messaging (RCS) — stub, same interface
+    factory.py         #   adapter resolution + SANDBOX_MODE
+  engagement/          # Agentic omnichannel engagement
+    orchestrator.py    #   post-call: email report + send follow-up
+    intent.py          #   Bedrock intent router (fixed action enum)
+    actions.py         #   action handlers (book / cost / human / answer)
+    inbound.py         #   two-way inbound handler + SNS/EUM parsing
+    state.py           #   ConversationState + DynamoDB (journey-agnostic)
+  prompts/             # Nova Sonic discovery prompt + intent-router prompt
+  server.py            # AgentCore WebSocket server (wires in engagement)
+  local_server.py      # local dev server
+infra/
+  template.yaml        # CloudFormation: AgentCore, CDS, SNS inbound, DynamoDB...
+  inbound_lambda.py    # production inbound handler (reuses agent/engagement)
+  bootstrap.yaml       # ECR bootstrap
+docs/                  # design, sprint plan, architecture, submission
+.kiro/                 # Scrum/DevSecOps steering + security guard hooks
+deploy.sh              # one-command deploy
+```
+
+## Quick start
 
 ```bash
-./deploy.sh --profile <your-aws-profile> --password <demo-password>
+# Sandbox (default): deploys and runs without SES/SMS provisioning.
+./deploy.sh --profile <aws-profile> --password <demo-password>
+
+# Live CDS: once a verified SES sender + an SMS origination identity exist.
+./deploy.sh --profile <aws-profile> --password <demo-password> \
+  --live --ses-sender no-reply@your-domain.com \
+  --sms-identity <phone-number-id-or-pool> \
+  --demo-email you@your-domain.com --demo-phone +1XXXXXXXXXX
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for full instructions.
+See [DEPLOYMENT.md](DEPLOYMENT.md) for CDS provisioning (SES verification, End
+User Messaging number, two-way SNS wiring) and the inbound Lambda packaging note.
 
-## Local Development
+## Local development
 
 ```bash
 cd agent
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements-local.txt
-cp .env.example .env  # edit with your values
+cp .env.example .env   # SANDBOX_MODE=true by default — no CDS needed
 uvicorn local_server:app --reload --port 8000
 ```
 
-Then open `frontend/index.html` in your browser.
+In `SANDBOX_MODE`, the channel adapters record what they *would* send (visible in
+logs and the `SANDBOX_OUTBOX`) so the whole voice → report → email → SMS →
+two-way reply loop runs with no provisioned CDS resources.
 
-## Cost
+## Development process
 
-All services are pay-per-use with no idle cost.
-
-| Service | Pricing |
-|---------|---------|
-| Nova 2 Sonic | Per audio second |
-| Nova Pro (report) | Per token |
-| AgentCore Runtime | Per invocation |
-| DynamoDB | Per request (on-demand) |
-| Bedrock Knowledge Base | Per query |
-| WAF (optional) | ~$7/month flat + $0.60/M requests |
+This project was built Scrum / DevSecOps style following an adapted
+[Kiro-SDLC-Scrum skill](https://github.com/timwukp/Kiro-SDLC-Scrum-best-practics).
+The sprint plan, backlog, and threat model are in
+[`docs/SPRINT_PLAN.md`](docs/SPRINT_PLAN.md); deterministic security guard hooks
+(credential / PII / prompt-security) live in [`.kiro/`](.kiro).
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

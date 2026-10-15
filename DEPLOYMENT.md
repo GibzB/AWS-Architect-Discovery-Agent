@@ -26,6 +26,65 @@ Before deploying, ensure you have model access in your AWS region:
    - `amazon.nova-pro-v1:0` (report generation)
 3. Wait for access to be granted (usually immediate)
 
+## AWS CDS — provisioning (for live sends)
+
+The project deploys and runs in `SANDBOX_MODE` by default (channel adapters
+record intended sends instead of calling AWS), so you can demo the full
+voice → report → email → SMS → two-way loop before any CDS resources exist. To
+send for real, provision the following in the **same region** (`us-east-1`).
+
+### 1. Amazon SES (email channel)
+
+1. Amazon SES console → **Verified identities** → verify a sender email or your
+   domain. (CloudFormation also creates an `AWS::SES::EmailIdentity` for the
+   address you pass as `--ses-sender`; you still complete the verification click
+   / DNS records.)
+2. If your SES account is in the sandbox, verify the recipient addresses too, or
+   request production access.
+
+### 2. AWS End User Messaging (SMS / RCS channel)
+
+1. AWS End User Messaging SMS console → request a phone number (or create a pool
+   / sender ID) capable of SMS. Note its **phone number id / ARN or pool id** —
+   that is your `--sms-identity` value.
+2. For two-way, enable **two-way SMS** on the number and set its **inbound SNS
+   destination** to the `InboundTopicArn` printed by `deploy.sh` (the
+   `aws-discovery-inbound` topic).
+3. RCS: once a brand RCS agent is approved, set `RCS_AGENT_ID` and switch
+   `--follow-up rcs`. The RCS adapter upgrades from text to rich cards with no
+   call-site change.
+
+### 3. Deploy live
+
+```bash
+./deploy.sh --profile <aws-profile> --password <demo-password> \
+  --live \
+  --ses-sender no-reply@your-domain.com \
+  --sms-identity <phone-number-id-or-pool-id> \
+  --follow-up sms \
+  --demo-email you@your-domain.com \
+  --demo-phone +1XXXXXXXXXX
+```
+
+After deploy, wire the EUM number's two-way inbound to the printed
+`InboundTopicArn`.
+
+### Inbound Lambda: demo vs production
+
+The CloudFormation ships a **self-contained inline inbound Lambda** so the
+two-way loop works immediately with no packaging. The **production** handler is
+`infra/inbound_lambda.py`, which reuses the full `agent/engagement` package
+(Bedrock intent routing, grounded answers, the channel layer). To use it, package
+the `agent/` directory with the Lambda (a container image, or a zip that includes
+`agent/channels` + `agent/engagement` + `agent/prompts`) and set the function's
+`Handler` to `inbound_lambda.handler`.
+
+### SANDBOX_MODE demo (no CDS resources)
+
+Leave the default (omit `--live`). The agent records what it would send; check
+the AgentCore / Lambda CloudWatch logs for `[sandbox] would send ...` lines to
+show the omnichannel flow end-to-end.
+
 ## Deploy
 
 ```bash

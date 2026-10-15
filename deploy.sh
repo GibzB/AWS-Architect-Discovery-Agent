@@ -21,13 +21,30 @@ ENABLE_WAF="false"
 PREBUILT="false"
 DOCKERHUB_IMAGE=""  # Set this if you publish a prebuilt image
 
+# ── AWS CDS (Communication Developer Services) ──
+# SANDBOX_MODE defaults to 'true' so a deploy works before SES/SMS are
+# provisioned. Pass --live once a verified SES sender and an SMS origination
+# identity exist to make the agent send over CDS for real.
+SANDBOX_MODE="true"
+SES_SENDER_EMAIL=""
+SMS_ORIGINATION_IDENTITY=""
+FOLLOW_UP_CHANNEL="sms"
+DEMO_EMAIL=""
+DEMO_PHONE=""
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --profile)   PROFILE="$2";       shift 2 ;;
-    --region)    REGION="$2";        shift 2 ;;
-    --password)  DEMO_PASSWORD="$2"; shift 2 ;;
-    --waf)       ENABLE_WAF="true";  shift ;;
-    --prebuilt)  PREBUILT="true";    shift ;;
+    --profile)      PROFILE="$2";                  shift 2 ;;
+    --region)       REGION="$2";                   shift 2 ;;
+    --password)     DEMO_PASSWORD="$2";            shift 2 ;;
+    --waf)          ENABLE_WAF="true";             shift ;;
+    --prebuilt)     PREBUILT="true";               shift ;;
+    --live)         SANDBOX_MODE="false";          shift ;;
+    --ses-sender)   SES_SENDER_EMAIL="$2";         shift 2 ;;
+    --sms-identity) SMS_ORIGINATION_IDENTITY="$2"; shift 2 ;;
+    --follow-up)    FOLLOW_UP_CHANNEL="$2";         shift 2 ;;
+    --demo-email)   DEMO_EMAIL="$2";               shift 2 ;;
+    --demo-phone)   DEMO_PHONE="$2";               shift 2 ;;
     *) echo "Unknown argument: $1"; exit 1 ;;
   esac
 done
@@ -114,6 +131,12 @@ $AWS cloudformation deploy \
     "DeployTimestamp=$DEPLOY_TS" \
     "DemoPasswordB64=$DEMO_PASSWORD_B64" \
     "EnableWAF=$ENABLE_WAF" \
+    "SandboxMode=$SANDBOX_MODE" \
+    "SesSenderEmail=$SES_SENDER_EMAIL" \
+    "SmsOriginationIdentity=$SMS_ORIGINATION_IDENTITY" \
+    "FollowUpChannel=$FOLLOW_UP_CHANNEL" \
+    "DemoEmail=$DEMO_EMAIL" \
+    "DemoPhone=$DEMO_PHONE" \
   --capabilities CAPABILITY_NAMED_IAM \
   --no-fail-on-empty-changeset
 
@@ -126,10 +149,13 @@ PRESIGN_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="PresignApiUrl")
 FRONTEND_BUCKET=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="FrontendBucketName") | .OutputValue')
 FRONTEND_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="FrontendUrl") | .OutputValue')
 RUNTIME_ARN=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="RuntimeArn") | .OutputValue')
+INBOUND_TOPIC_ARN=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="InboundTopicArn") | .OutputValue')
 
 echo "  Presign API: $PRESIGN_URL"
 echo "  Frontend bucket: $FRONTEND_BUCKET"
 echo "  Runtime ARN: $RUNTIME_ARN"
+echo "  Inbound SNS topic (wire to your EUM number's two-way config): $INBOUND_TOPIC_ARN"
+echo "  CDS mode: $([[ "$SANDBOX_MODE" == "true" ]] && echo "SANDBOX (records sends)" || echo "LIVE (sends over CDS)")"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Phase 4 — Write frontend config

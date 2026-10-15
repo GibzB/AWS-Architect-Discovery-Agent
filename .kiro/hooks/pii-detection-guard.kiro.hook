@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "PII Detection Guard",
+  "description": "Block hardcoded customer PII (emails, E.164 phone numbers, card-length digit runs) in source. This app handles customer contact data over AWS CDS.",
+  "version": "1",
+  "when": {
+    "type": "preToolUse",
+    "toolTypes": ["write"]
+  },
+  "then": {
+    "type": "runCommand",
+    "command": ".kiro/hooks/scripts/detect-pii.sh"
+  }
+}

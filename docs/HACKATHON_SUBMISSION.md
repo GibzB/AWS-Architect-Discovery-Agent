@@ -1,114 +1,157 @@
-# Hackathon Submission — AWS Discovery Orchestrator
+# Hackathon Submission — AWS CDS Agentic Omnichannel Engagement
+
+**AWS CDS Agentic AI Partner Hackathon**
 
 ---
 
-## About the Project (Project Story)
+## Elevator pitch
+
+A conversation that starts as a voice discovery call and continues as a real
+two-way dialogue across email, SMS, and RCS — powered by AWS Communication
+Developer Services as the backbone and Amazon Bedrock as the agentic brain. The
+customer gets their report, replies in their own words, and an AI agent picks up
+exactly where the last message left off, taking real actions on their behalf.
+
+---
+
+## About the project
 
 ### Inspiration
 
-As someone who works in the cloud solutions space, I've seen how the architecture discovery process is painfully slow. A solutions architect spends weeks scheduling meetings, interviewing stakeholders, researching services, and writing reports — all before a single resource is provisioned. I asked myself: what if an AI could conduct that entire discovery interview in real-time over voice, then instantly produce the report?
+Pre-sales architecture discovery is slow, and worse, it goes cold the moment the
+call ends. The customer gets a PDF days later and the thread dies. The hackathon
+brief captures the fix perfectly: engagement should be conversational, two-way,
+and omnichannel — reaching customers in the channel they prefer and picking up
+where the last conversation left off. We took an existing voice-discovery agent
+and made AWS CDS its communications backbone so the relationship continues after
+the call, on the customer's terms.
 
-The Azure Discovery Orchestrator project (which I previously built) proved the concept works — but it relied on multiple Azure services stitched together (Speech SDK for STT/TTS, OpenAI for reasoning, Cosmos DB, etc.). When I discovered Amazon Bedrock AgentCore and Nova 2 Sonic, I realized I could build something far simpler and more elegant: a single model that handles the entire voice conversation natively, running on a fully serverless runtime with zero infrastructure to manage.
+### What it does
 
-### What It Does
+1. **Voice discovery** — the customer has a natural voice conversation with an AI
+   architect (Amazon Nova Sonic on Bedrock AgentCore).
+2. **Report** — Amazon Nova Pro generates a structured discovery report.
+3. **Email (Amazon SES)** — the full report is emailed instantly.
+4. **Interactive follow-up (AWS End User Messaging — SMS/RCS)** — a message
+   offers next steps: book a deep-dive, see the cost estimate, or talk to a human.
+5. **Two-way, agentic** — the customer replies in free text. The reply is
+   classified by Amazon Bedrock and drives a real action; the agent responds on
+   the same channel and remembers the context for the next turn.
 
-The AWS Discovery Orchestrator is a voice-powered AI agent that conducts architecture discovery workshops with clients. A user opens the web app, clicks "Start Discovery Session," and has a natural voice conversation with an AI architect that:
+This is the omnichannel journey the brief describes: a conversation that starts
+in one channel (voice), delivers in another (email), and completes an action in
+another (SMS/RCS) — without the customer leaving the messaging experience.
 
-1. Asks structured questions about their business, technical needs, compliance requirements, and growth plans
-2. Adapts follow-up questions based on answers
-3. Generates a complete architecture recommendation report the moment the session ends
+### How AWS CDS is used at runtime
 
-A typical 12-minute conversation replaces 20-40 hours of senior architect work and produces a professional report instantly.
+| CDS service | Runtime role | Code |
+|-------------|-------------|------|
+| **Amazon SES** | Emails the discovery report | `agent/channels/ses_adapter.py` → `sesv2.send_email` |
+| **AWS End User Messaging (SMS)** | Sends the interactive follow-up and receives the two-way reply | `agent/channels/sms_adapter.py` → `pinpoint-sms-voice-v2.send_text_message` |
+| **AWS End User Messaging (RCS)** | Rich-card follow-up, drop-in behind the same interface | `agent/channels/rcs_adapter.py` |
+| **AWS End User Messaging Social (WhatsApp)** | Future adapter (Meta prize path) | `socialmessaging.send_whatsapp_message` |
 
-### How I Built It
+Inbound replies are delivered by End User Messaging to an Amazon SNS topic and
+processed by a Lambda (`infra/inbound_lambda.py`) that runs one agentic turn:
+verify → classify (Bedrock) → act → reply over CDS.
 
-**Architecture:**
-- **Amazon Nova 2 Sonic** handles the entire voice conversation — bidirectional audio streaming means no separate STT or TTS services needed
-- **Amazon Nova Pro** generates the post-session report (architecture recommendations, AWS service breakdown, cost estimates, next steps)
-- **Amazon Bedrock AgentCore Runtime** hosts the agent container serverlessly — scales to zero, no servers to manage
-- **AWS Lambda + API Gateway** generates SigV4 presigned WebSocket URLs for secure browser-to-agent connections
-- **Amazon DynamoDB** stores session transcripts and generated reports
-- **Amazon S3 + CloudFront** serves the frontend globally with HTTPS
-- **AWS CloudFormation** defines the entire infrastructure as code
+### Agentic AI (Amazon Bedrock)
 
-**Tech stack:**
-- Python 3.12 + FastAPI (agent backend)
-- Vanilla HTML/CSS/JS (frontend — intentionally lightweight)
-- Docker (ARM64 container for AgentCore)
-- Single deploy script that stands up everything in one command
+- **Nova Sonic** runs the real-time bidirectional voice discovery interview.
+- **Nova Pro** generates the report, classifies inbound intent into a fixed
+  action set, and answers follow-up questions grounded in the report.
+- **Bedrock AgentCore Runtime** hosts the agent serverlessly.
 
-**Key design decision:** Instead of the multi-agent routing pattern (orchestrator → business agent → architect agent → security agent), I use Nova 2 Sonic's native conversational abilities with a comprehensive system prompt that covers all discovery phases. This eliminates inter-agent latency and produces a more natural conversation flow. Nova Pro then acts as the "report agent" post-session.
+The intent router is deliberately constrained to a fixed action enum
+(`book_deepdive`, `cost_estimate`, `talk_to_human`, `ask_question`, `unknown`),
+so a customer's free-text reply can never drive a privileged operation directly —
+agentic flexibility with a bounded, safe action surface.
+
+### How we built it
+
+- **Channel abstraction layer** (`agent/channels/`) — every outbound message goes
+  through one `send(recipient, message)` interface. SES, SMS, RCS (and future
+  WhatsApp) are interchangeable adapters. Adding a channel is one new class.
+- **Journey-agnostic conversation state** (`agent/engagement/state.py`) — stored
+  in DynamoDB, keyed by customer identity so context survives across channels.
+  This is also what makes the solution a *repeatable offering*: a different
+  vertical journey (healthcare, retail, logistics) is a prompt + journey-config
+  swap, not a rewrite.
+- **SANDBOX_MODE** — the whole flow is runnable with no provisioned CDS
+  resources, so judges and demos can exercise voice → report → email → SMS →
+  two-way reply end-to-end; the real boto3 CDS calls remain on the production
+  path.
+- **Process** — built Scrum / DevSecOps style (adapted
+  [Kiro-SDLC-Scrum skill](https://github.com/timwukp/Kiro-SDLC-Scrum-best-practics)):
+  sprint plan + backlog + STRIDE threat model in `docs/SPRINT_PLAN.md`, and
+  deterministic credential/PII/prompt-security guard hooks in `.kiro/`.
 
 ### Challenges
 
-1. **AgentCore WebSocket proxy behavior** — The proxy only delivers server→client messages while handling a client frame. I had to implement a message queue pattern where Nova Sonic callbacks enqueue messages, and the main loop flushes them on each client frame.
+- **Two-way trust.** Inbound webhooks are an attack surface. We only act on
+  senders with existing conversation state, always reply to the stored address
+  (never a value from the message body), and verify the event shape.
+- **Provisioning lead time.** SES verification, an EUM number, and RCS agent
+  approval all take time. `SANDBOX_MODE` and the adapter seam let us build and
+  demo the complete flow in parallel with provisioning.
+- **Portability of the security tooling.** The DevSecOps skill we adopted was
+  tuned for a Singapore banking context; we ported the useful guard hooks to our
+  Python/`us-east-1`/CDS stack and dropped the banking-specific ones.
 
-2. **Nova 2 Sonic bidirectional stream protocol** — The event-based protocol (contentStart/textInput/audioInput/contentEnd) requires precise sequencing. Getting the session start → system prompt → greeting trigger → audio block open sequence right took careful study of the SDK.
+### What we learned
 
-3. **Transcript deduplication** — Nova Sonic sometimes echoes transcript events. I implemented a seen-set to suppress duplicates.
-
-4. **Cold starts** — AgentCore containers take 30-60 seconds on first invocation. I documented this clearly and recommend a warm-up call before demos.
-
-### What I Learned
-
-- Bedrock AgentCore Runtime is a genuinely zero-ops way to deploy AI agents — no ECS clusters, no auto-scaling configs, no load balancers
-- Nova 2 Sonic's native bidirectional voice eliminates an entire class of complexity (separate STT → LLM → TTS pipelines)
-- The SigV4 presigned URL pattern for WebSocket auth is elegant and avoids putting credentials in the frontend
-- CloudFormation custom resource types (`AWS::BedrockAgentCore::Runtime`) make IaC for new services straightforward
-
----
-
-## Built With
-
-- Amazon Bedrock (Nova 2 Sonic, Nova Pro)
-- Amazon Bedrock AgentCore Runtime
-- AWS Lambda
-- Amazon API Gateway
-- Amazon DynamoDB
-- Amazon S3
-- Amazon CloudFront
-- AWS CloudFormation
-- AWS IAM
-- AWS WAF
-- Python
-- FastAPI
-- Docker
+- CDS turns a one-shot AI interaction into a durable, multi-channel relationship
+  with very little plumbing once a channel abstraction is in place.
+- Constraining an agent to a fixed action enum is a simple, strong defense that
+  keeps the experience conversational without opening a prompt-injection hole.
 
 ---
 
-## Links and Media
+## Meta WhatsApp prize
 
+The channel abstraction makes WhatsApp (AWS End User Messaging Social) a single
+additional adapter implementing the same `Channel` interface
+(`socialmessaging.send_whatsapp_message`), with inbound handled by the same
+SNS → Lambda → Bedrock path. The journey — report delivery, interactive
+follow-up, two-way agentic replies — runs on WhatsApp with no changes to the
+engagement logic. See [`docs/DESIGN_CDS.md`](DESIGN_CDS.md) §3 and §8.
+
+---
+
+## Built with
+
+Amazon Bedrock (Nova Sonic, Nova Pro) · Amazon Bedrock AgentCore Runtime ·
+**Amazon SES** · **AWS End User Messaging (SMS/RCS)** · Amazon SNS · AWS Lambda ·
+Amazon API Gateway · Amazon DynamoDB · Amazon S3 · Amazon CloudFront · AWS
+CloudFormation · AWS IAM · Python · FastAPI · Docker
+
+---
+
+## Links and media
+
+- **Repository:** https://github.com/GibzB/AWS-Architect-Discovery-Agent
+  (branch `feature/cds-agentic-messaging`)
+- **Architecture diagram:** [`docs/architecture-diagram.md`](architecture-diagram.md)
+- **Design:** [`docs/DESIGN_CDS.md`](DESIGN_CDS.md)
+- **Sprint plan / process:** [`docs/SPRINT_PLAN.md`](SPRINT_PLAN.md)
 - **Demo URL:** *(CloudFront URL after deployment)*
-- **GitHub / Repository URL:** https://github.com/GibzB/AWS-Architect-Discovery-Agent
+- **Demo video:** *(record ~3 min — see script below)*
+
+### Suggested 3-minute demo script
+
+1. Start a voice discovery session; have a short conversation; end it.
+2. Show the report appear, then the SES email and the SMS follow-up (in
+   `SANDBOX_MODE`, show the `[sandbox] would send ...` log lines, or show the
+   real email/SMS if deployed live).
+3. Reply to the SMS with "1" → show the agent book a deep-dive and reply back.
+4. Reply with a free-text question → show the agent answer from the report.
+5. Point at the architecture diagram and name the CDS services doing the work.
 
 ---
 
-## Video Demo Link
+## How to interact with it
 
-*(Record a 2-3 minute demo showing: clicking Start → having a brief voice conversation → seeing the transcript appear live → ending session → seeing the report generate)*
-
----
-
-## Technology Partner: AWS
-
-### How I Used AWS
-
-The entire application runs exclusively on AWS services with a fully serverless architecture:
-
-**Amazon Bedrock — Nova 2 Sonic** is the core of the system. It powers the real-time bidirectional voice conversation between the user and the AI architect. The model receives a system prompt that structures the discovery interview into 5 phases (business context, technical workloads, compliance, growth, recommendation) and conducts the entire conversation via streaming audio — no separate speech-to-text or text-to-speech services needed.
-
-**Amazon Bedrock — Nova Pro** generates the post-session discovery report. After the voice conversation ends, the full transcript is sent to Nova Pro with a report-generation prompt. It produces a structured Markdown document with architecture recommendations, AWS service breakdown with cost estimates, security considerations, and concrete next steps.
-
-**Amazon Bedrock AgentCore Runtime** hosts the agent as a serverless container. It manages scaling (including scale-to-zero), WebSocket proxying with SigV4 authentication, health checks, and container lifecycle — all without any ECS/EKS/EC2 infrastructure. The container runs a FastAPI server that bridges the browser WebSocket to the Nova 2 Sonic bidirectional stream.
-
-**AWS Lambda + Amazon API Gateway** provide the presign API. A single Lambda function generates SigV4-presigned WebSocket URLs that allow the browser to securely connect to AgentCore without exposing AWS credentials client-side.
-
-**Amazon DynamoDB** persists session data — transcripts and generated reports — with on-demand billing (zero cost when idle).
-
-**Amazon S3 + Amazon CloudFront** serve the static frontend (HTML/JS/CSS) globally over HTTPS with Origin Access Control. A CloudFront Function handles optional HTTP Basic Auth for demo access.
-
-**AWS WAF** (optional) adds rate limiting and AWS managed common rules for production protection.
-
-**AWS CloudFormation** defines the entire infrastructure as code in two templates, deployable with a single shell script.
-
-The result is a system that costs $0.08-0.25 per discovery session, scales to zero when not in use, and requires zero operational maintenance.
+- **Deployed:** open the CloudFront URL, log in (`demo` / your password), start a
+  session. Live CDS sends to your `--demo-email` / `--demo-phone`.
+- **Local (no AWS CDS needed):** run `uvicorn local_server:app` in `SANDBOX_MODE`
+  (see README) and watch the recorded sends in the logs.

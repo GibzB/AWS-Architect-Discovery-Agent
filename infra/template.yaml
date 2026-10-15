@@ -26,8 +26,43 @@ Parameters:
     AllowedValues: ['true', 'false']
     Description: Enable AWS WAF with rate limiting on CloudFront
 
+  # ── AWS CDS (Communication Developer Services) configuration ──
+  SandboxMode:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >
+      When 'true', channel adapters record intended sends instead of calling CDS
+      (SES / End User Messaging). Set 'false' once SES identity + SMS number exist.
+  SesSenderEmail:
+    Type: String
+    Default: ''
+    Description: >
+      Verified Amazon SES "From" address for report emails
+      (e.g. no-reply@your-domain.com). Required for real email sends.
+  SmsOriginationIdentity:
+    Type: String
+    Default: ''
+    Description: >
+      AWS End User Messaging origination identity (phone number ARN/ID, pool ID,
+      or sender ID) used to send SMS/RCS. Required for real messaging sends.
+  FollowUpChannel:
+    Type: String
+    Default: 'sms'
+    AllowedValues: ['sms', 'rcs']
+    Description: Channel used for the interactive post-call follow-up message.
+  DemoEmail:
+    Type: String
+    Default: ''
+    Description: Fallback report recipient email for demo sessions (optional).
+  DemoPhone:
+    Type: String
+    Default: ''
+    Description: Fallback follow-up recipient phone (E.164) for demo sessions (optional).
+
 Conditions:
   WAFEnabled: !Equals [!Ref EnableWAF, 'true']
+  HasSesSender: !Not [!Equals [!Ref SesSenderEmail, '']]
 
 Resources:
 
@@ -45,6 +80,167 @@ Resources:
       KeySchema:
         - AttributeName: session_id
           KeyType: HASH
+      # Conversation-state records carry a `ttl` so customer contact data
+      # auto-expires (privacy / data-minimization — see SPRINT_PLAN threat model).
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # ════════════════════════════════════════════════════════════════
+  # AWS CDS — Amazon SES verified sender identity (email channel)
+  # ════════════════════════════════════════════════════════════════
+  ReportSenderIdentity:
+    Type: AWS::SES::EmailIdentity
+    Condition: HasSesSender
+    Properties:
+      EmailIdentity: !Ref SesSenderEmail
+
+  # ════════════════════════════════════════════════════════════════
+  # AWS CDS — inbound two-way messaging
+  #   AWS End User Messaging publishes inbound SMS/RCS replies to this SNS
+  #   topic; the inbound Lambda runs one agentic turn per message.
+  #   Wire the topic to a number's two-way config in the EUM console (or CLI)
+  #   after deploy — ARN is exported below.
+  # ════════════════════════════════════════════════════════════════
+  InboundTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: aws-discovery-inbound
+
+  InboundLambdaRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: aws-discovery-inbound-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: InboundPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              # Reply over CDS (SMS/RCS) and, if needed, email
+              - Effect: Allow
+                Action:
+                  - sms-voice:SendTextMessage
+                  - ses:SendEmail
+                Resource: "*"
+              # Agentic intent routing + grounded answers via Bedrock
+              - Effect: Allow
+                Action: bedrock:InvokeModel
+                Resource:
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/amazon.nova*"
+              # Conversation state
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt SessionsTable.Arn
+
+  # NOTE: This inline handler is a self-contained demo of the inbound agentic
+  # loop. The production handler is infra/inbound_lambda.py, which reuses the
+  # agent/engagement package verbatim — package agent/ with the Lambda (e.g. a
+  # container image or a zip built by deploy.sh) and point Handler at
+  # inbound_lambda.handler. See DEPLOYMENT.md.
+  InboundLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: aws-discovery-inbound
+      Runtime: python3.12
+      Handler: index.handler
+      Role: !GetAtt InboundLambdaRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          AWS_DEFAULT_REGION_HINT: !Ref AWS::Region
+          SANDBOX_MODE: !Ref SandboxMode
+          SMS_ORIGINATION_IDENTITY: !Ref SmsOriginationIdentity
+          DYNAMODB_TABLE: !Ref SessionsTable
+      Code:
+        ZipFile: |
+          # Self-contained demo inbound handler. Mirrors agent/engagement:
+          # verify -> load state -> classify (keyword) -> act -> reply.
+          # Production uses infra/inbound_lambda.py with the full agent package.
+          import json, os, logging, boto3
+          log = logging.getLogger(); log.setLevel(logging.INFO)
+          REGION = os.environ.get("AWS_DEFAULT_REGION_HINT", "us-east-1")
+          TABLE = os.environ.get("DYNAMODB_TABLE", "aws-discovery-sessions")
+          SANDBOX = os.environ.get("SANDBOX_MODE", "true").lower() in ("1","true","yes")
+          ORIG = os.environ.get("SMS_ORIGINATION_IDENTITY", "")
+
+          def classify(text):
+              t = (text or "").strip().lower()
+              if t in ("1","one") or "book" in t or "deep" in t: return "book_deepdive"
+              if t in ("2","two") or "cost" in t or "price" in t: return "cost_estimate"
+              if t in ("3","three") or "human" in t or "call" in t: return "talk_to_human"
+              if "?" in t: return "ask_question"
+              return "unknown"
+
+          REPLIES = {
+            "book_deepdive": "Great - reply with a day and time and an architect will confirm a slot.",
+            "cost_estimate": "Your report has a per-service cost breakdown. Reply 1 to book a walkthrough.",
+            "talk_to_human": "Flagged for an architect - they will reach out shortly.",
+            "ask_question": "Good question - the key points are in your report summary. Reply 1 to book a deep-dive.",
+            "unknown": "You can reply: 1 Book a deep-dive, 2 See cost estimate, 3 Talk to a human.",
+          }
+
+          def mask(addr):
+              d = [c for c in (addr or "") if c.isdigit()]
+              return "***" + "".join(d[-4:]) if len(d) >= 4 else "***"
+
+          def handler(event, context):
+              ddb = boto3.resource("dynamodb", region_name=REGION).Table(TABLE)
+              sms = boto3.client("pinpoint-sms-voice-v2", region_name=REGION) if not SANDBOX else None
+              out = []
+              for rec in event.get("Records", []):
+                  try:
+                      payload = json.loads(rec["Sns"]["Message"])
+                  except Exception:
+                      continue
+                  sender = payload.get("originationNumber") or payload.get("from") or ""
+                  text = payload.get("messageBody") or payload.get("body") or ""
+                  if not sender or not text:
+                      continue
+                  cid = f"sms:{sender.strip().lower()}"
+                  item = ddb.get_item(Key={"session_id": cid}).get("Item")
+                  if not item:
+                      log.info("no conversation state for %s; ignoring", mask(sender))
+                      continue
+                  action = classify(text)
+                  reply = REPLIES.get(action, REPLIES["unknown"])
+                  reply_to = (item.get("channels") or {}).get("sms", sender)
+                  if SANDBOX or not ORIG:
+                      log.info("[sandbox] would reply to %s: %s", mask(reply_to), reply[:60])
+                  else:
+                      sms.send_text_message(DestinationPhoneNumber=reply_to,
+                                            OriginationIdentity=ORIG, MessageBody=reply)
+                  item["stage"] = {"book_deepdive":"booking_requested","cost_estimate":"shared_cost",
+                                   "talk_to_human":"handoff_requested"}.get(action, item.get("stage","awaiting_choice"))
+                  ddb.put_item(Item=item)
+                  out.append({"sender": mask(sender), "action": action})
+              return {"statusCode": 200, "body": json.dumps({"processed": len(out), "results": out})}
+
+  InboundTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref InboundTopic
+      Protocol: lambda
+      Endpoint: !GetAtt InboundLambda.Arn
+
+  InboundLambdaSnsPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref InboundLambda
+      Action: lambda:InvokeFunction
+      Principal: sns.amazonaws.com
+      SourceArn: !Ref InboundTopic
 
   # ────────────────────────────────────────────────────────────────
   # AgentCore Runtime — IAM execution role
@@ -103,6 +299,18 @@ Resources:
                   - dynamodb:Scan
                 Resource: !GetAtt SessionsTable.Arn
 
+              # AWS CDS — Amazon SES (send the discovery report by email)
+              - Effect: Allow
+                Action:
+                  - ses:SendEmail
+                Resource: "*"
+
+              # AWS CDS — End User Messaging (send SMS / RCS follow-up)
+              - Effect: Allow
+                Action:
+                  - sms-voice:SendTextMessage
+                Resource: "*"
+
               # CloudWatch Logs
               - Effect: Allow
                 Action:
@@ -149,6 +357,13 @@ Resources:
         AWS_DEFAULT_REGION: !Ref AWS::Region
         DYNAMODB_TABLE: !Ref SessionsTable
         DEPLOY_VERSION: !Ref DeployTimestamp
+        # ── AWS CDS omnichannel engagement ──
+        SANDBOX_MODE: !Ref SandboxMode
+        SES_SENDER_EMAIL: !Ref SesSenderEmail
+        SMS_ORIGINATION_IDENTITY: !Ref SmsOriginationIdentity
+        FOLLOW_UP_CHANNEL: !Ref FollowUpChannel
+        DEMO_EMAIL: !Ref DemoEmail
+        DEMO_PHONE: !Ref DemoPhone
 
   # ────────────────────────────────────────────────────────────────
   # Presign Lambda — generates SigV4 presigned WSS URL
@@ -460,3 +675,9 @@ Outputs:
   SessionsTableName:
     Description: DynamoDB table for session storage
     Value: !Ref SessionsTable
+
+  InboundTopicArn:
+    Description: >
+      SNS topic for inbound two-way messages. Set this as the two-way SNS
+      destination on your AWS End User Messaging phone number / RCS agent.
+    Value: !Ref InboundTopic

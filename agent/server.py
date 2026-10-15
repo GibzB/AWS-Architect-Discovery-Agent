@@ -23,6 +23,7 @@ from fastapi.responses import JSONResponse
 from nova_sonic import NovaSonicSession
 from prompts.orchestrator import DISCOVERY_SYSTEM_PROMPT
 from report import generate_report, generate_digest
+from engagement import run_post_call_engagement
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -147,6 +148,19 @@ async def discovery_ws(ws: WebSocket):
 
                 # Persist to DynamoDB
                 await asyncio.to_thread(_save_session, session_id, transcript, report)
+
+                # ── CDS omnichannel follow-up ──
+                # Deliver the report by email (SES) and open a two-way SMS/RCS
+                # conversation. Runs in a thread (blocking boto3) and never
+                # breaks the session on a messaging failure.
+                try:
+                    engagement = await asyncio.to_thread(
+                        run_post_call_engagement, session_id, report, digest
+                    )
+                    enqueue({"type": "engagement", "data": engagement})
+                except Exception as eng_exc:
+                    log.exception("Engagement follow-up failed: %s", eng_exc)
+                    enqueue({"type": "engagement_error", "message": str(eng_exc)})
 
             except Exception as exc:
                 log.exception("Report generation failed: %s", exc)

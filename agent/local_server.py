@@ -26,6 +26,7 @@ load_dotenv()
 from nova_sonic import NovaSonicSession
 from prompts.orchestrator import DISCOVERY_SYSTEM_PROMPT
 from report import generate_report, generate_digest
+from engagement import run_post_call_engagement
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -92,6 +93,16 @@ async def discovery_ws(ws: WebSocket):
                 enqueue({"type": "digest", "data": digest})
                 report = await asyncio.to_thread(generate_report, transcript)
                 enqueue({"type": "report", "data": report})
+
+                # CDS omnichannel follow-up (email report + two-way SMS/RCS).
+                try:
+                    engagement = await asyncio.to_thread(
+                        run_post_call_engagement, session_id, report, digest
+                    )
+                    enqueue({"type": "engagement", "data": engagement})
+                except Exception as eng_exc:
+                    log.exception("Engagement follow-up failed: %s", eng_exc)
+                    enqueue({"type": "engagement_error", "message": str(eng_exc)})
             except Exception as exc:
                 log.exception("Report generation failed: %s", exc)
                 enqueue({"type": "error", "message": f"Report failed: {exc}"})
