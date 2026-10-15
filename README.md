@@ -112,6 +112,31 @@ In `SANDBOX_MODE`, the channel adapters record what they *would* send (visible i
 logs and the `SANDBOX_OUTBOX`) so the whole voice → report → email → SMS →
 two-way reply loop runs with no provisioned CDS resources.
 
+## GitHub Codespaces (cloud dev — no local Docker needed)
+
+The repo ships a `.devcontainer`, so a Codespace comes up with Docker, the AWS
+CLI, Python 3.12, and `jq` ready — ideal for running the full `./deploy.sh`
+(which builds an ARM64 container) without installing Docker locally.
+
+```bash
+# From the repo on GitHub: Code → Codespaces → Create codespace on
+# feature/cds-agentic-messaging
+# Then, inside the Codespace terminal:
+aws configure                      # or set AWS_* env vars
+./deploy.sh --profile <aws-profile> --password <demo-password>
+```
+
+To edit from a local editor instead of the browser, connect over SSH with the
+GitHub CLI:
+
+```bash
+gh codespace ssh                   # interactive shell
+gh codespace ssh --config          # prints an SSH host entry for Remote-SSH editors
+```
+
+Any editor with Remote-SSH support can then attach to that host. The deploy
+itself is plain shell, so it runs the same in the browser terminal or over SSH.
+
 ## Development process
 
 This project was built Scrum / DevSecOps style following an adapted
