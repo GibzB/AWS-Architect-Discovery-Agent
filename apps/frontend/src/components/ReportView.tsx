@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ReportResponse } from '../lib/api';
+import { EngagementPanel } from './EngagementPanel';
 
 interface ReportViewProps {
   report: ReportResponse;
@@ -34,6 +35,9 @@ export function ReportView({ report }: ReportViewProps) {
           <Badge label="Terraform Ready" color="info" />
         </div>
       </div>
+
+      {/* AWS CDS omnichannel delivery */}
+      <EngagementPanel sessionId={report.session_id} />
 
       {/* Tab Bar */}
       <div className="flex gap-1 bg-surface rounded-lg p-1 border border-border">

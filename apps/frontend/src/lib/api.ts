@@ -100,3 +100,33 @@ export async function getReport(sessionId: string): Promise<ReportResponse> {
   if (!res.ok) throw new Error(`Report not available: ${res.status}`);
   return res.json();
 }
+
+// ── AWS CDS omnichannel engagement ──
+
+export interface EngageRequest {
+  email?: string;
+  phone?: string;
+  follow_up_channel?: 'sms' | 'rcs';
+}
+
+export interface EngageResponse {
+  session_id: string;
+  delivered: {
+    email: { ok: boolean; sandbox: boolean; to: string } | null;
+    follow_up: { channel: string; ok: boolean; sandbox: boolean; to: string } | null;
+  };
+}
+
+/** Deliver the report over AWS CDS (SES email + SMS/RCS follow-up). */
+export async function engageSession(sessionId: string, data: EngageRequest): Promise<EngageResponse> {
+  const res = await fetch(`${BASE_URL}/sessions/${sessionId}/engage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const detail = await res.json().catch(() => ({}));
+    throw new Error(detail.detail || `Engage failed: ${res.status}`);
+  }
+  return res.json();
+}
