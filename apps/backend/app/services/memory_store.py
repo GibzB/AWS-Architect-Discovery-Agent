@@ -113,5 +113,27 @@ class MemoryStore:
         return list(self._sessions.keys())
 
 
+# ──────────────────────────────────────────────────────────────
+# Backend selection
+#   SESSION_BACKEND=dynamodb  -> durable DynamoDB store (Lambda-safe)
+#   otherwise                 -> in-memory (local dev / tests)
+# Both expose the identical interface.
+# ──────────────────────────────────────────────────────────────
+import os as _os
+
+
+def _make_store():
+    if _os.getenv("SESSION_BACKEND", "memory").lower() == "dynamodb":
+        try:
+            from app.services.dynamo_store import DynamoSessionStore
+
+            logger.info("Session backend: DynamoDB")
+            return DynamoSessionStore()
+        except Exception as exc:  # fall back rather than crash the app
+            logger.error("DynamoDB store init failed (%s); falling back to in-memory", exc)
+    logger.info("Session backend: in-memory")
+    return MemoryStore()
+
+
 # Singleton
-memory_store = MemoryStore()
+memory_store = _make_store()
