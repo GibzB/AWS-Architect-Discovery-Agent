@@ -1,0 +1,33 @@
+# Lambda Web Adapter container for the Atlas backend (chat + AWS CDS engagement).
+#
+# Runs the unchanged FastAPI app (uvicorn) inside Lambda. The adapter forwards
+# the Lambda HTTP event to the app on PORT and returns the response — no code
+# changes, no Mangum. WebSocket voice is intentionally not served here (Lambda
+# Function URLs are request/response only); voice runs on a streaming target.
+#
+# Build context MUST be the repo root so packages/ agents/ tools/ are available:
+#   docker build -f apps/backend/Dockerfile.lambda -t <tag> .
+
+FROM public.ecr.aws/docker/library/python:3.12-slim
+
+# Lambda Web Adapter — forwards Lambda events to a web server on $PORT.
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:0.9.1 /lambda-adapter /opt/extensions/lambda-adapter
+
+ENV PORT=8000 \
+    AWS_LWA_INVOKE_MODE=buffered \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /var/task
+
+# Backend deps (voice SDK not needed — not served on Lambda).
+COPY apps/backend/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# App code + shared workspace packages.
+COPY apps/backend/app ./app
+COPY packages ./packages
+COPY agents ./agents
+COPY tools ./tools
+
+# Lambda sets the entrypoint; the adapter starts this command as the web server.
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
