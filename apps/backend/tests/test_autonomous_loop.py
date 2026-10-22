@@ -1,11 +1,9 @@
 """Test the full autonomous reasoning loop: Discovery → Architect → Review → Complete."""
 
-import json
 import pytest
 from unittest.mock import patch
 from httpx import AsyncClient, ASGITransport
 from app.main import app
-from app.services.memory_store import memory_store
 
 
 def _planner_decision(next_agent, reason, complete=False):

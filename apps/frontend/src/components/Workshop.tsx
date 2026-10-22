@@ -100,7 +100,7 @@ export function Workshop({ sessionId, onReset }: WorkshopProps) {
           setReport(r);
         } catch { /* not ready yet */ }
       }
-    } catch (err) {
+    } catch {
       const errorMsg: Message = {
         id: `error-${Date.now()}`,
         role: 'assistant',

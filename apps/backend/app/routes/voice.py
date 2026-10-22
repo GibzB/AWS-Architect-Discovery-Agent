@@ -13,8 +13,6 @@ import asyncio
 import base64
 import json
 import logging
-import uuid
-from io import BytesIO
 
 import boto3
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect

@@ -24,7 +24,7 @@ export function StartScreen({ onSessionCreated }: StartScreenProps) {
         customer_industry: industry.trim() || undefined,
       });
       onSessionCreated(session.session_id, name.trim());
-    } catch (err) {
+    } catch {
       setError('Failed to start session. Is the backend running?');
     } finally {
       setLoading(false);

@@ -1,0 +1,11 @@
+# Ruff config for the Atlas backend.
+line-length = 120
+
+[lint]
+# Default rule set (E, F) is fine for this project.
+
+[lint.per-file-ignores]
+# These modules intentionally insert sys.path entries before importing app/
+# packages (monorepo layout), so imports are legitimately not at top of file.
+"app/main.py" = ["E402"]
+"lambda_handler.py" = ["E402"]

@@ -68,8 +68,23 @@ class DiscoveryAgent(BaseAgent):
         if gaps:
             memory_updates["unknown_facts"] = gaps
 
-        # Check if sufficient for architecture
-        if result.get("sufficient_for_architecture"):
+        # Deterministic sufficiency safety valve.
+        # The LLM tends to stay in discovery indefinitely; once the core fact
+        # categories are covered (business, technical, compliance, operations)
+        # OR enough facts have accumulated, advance to architecture regardless of
+        # the model's hedging. This keeps the workshop progressing reliably.
+        all_facts = memory_updates.get("known_facts", context.memory.get("known_facts", []))
+        categories = {
+            f.get("category", "")
+            for f in all_facts
+            if isinstance(f, dict)
+        }
+        core = {"business", "technical", "compliance", "operations"}
+        enough = len(categories & core) >= 3 or len(all_facts) >= 6
+        sufficient = bool(result.get("sufficient_for_architecture")) or enough
+
+        if sufficient:
+            result["sufficient_for_architecture"] = True
             memory_updates["status"] = "architecture"
 
         return AgentOutput(

@@ -64,6 +64,7 @@ async def voice_call(ws: WebSocket):
             customer_industry="",
         )
         session_id = result["session_id"]
+        assert session_id is not None  # narrow type for downstream use
 
         await send({"type": "status", "state": "connecting"})
 

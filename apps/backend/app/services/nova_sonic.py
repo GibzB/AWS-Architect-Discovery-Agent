@@ -9,7 +9,6 @@ No browser STT needed — Nova Sonic does everything.
 import asyncio
 import json
 import logging
-import os
 import uuid
 
 import boto3
@@ -26,7 +25,6 @@ from aws_sdk_bedrock_runtime.models import (
 from smithy_aws_core.identity.static import StaticCredentialsResolver
 from smithy_core.shapes import ShapeID
 
-from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -267,7 +265,7 @@ class NovaSonicSession:
         await self._send(payload_text)
         await asyncio.sleep(0.1)
         await self._send(payload_end)
-        logger.info(f"[tx] system prompt sent OK")
+        logger.info("[tx] system prompt sent OK")
 
     async def _send_greeting_trigger(self):
         name = str(uuid.uuid4())
@@ -294,7 +292,7 @@ class NovaSonicSession:
         await self._send(payload_text)
         await asyncio.sleep(0.1)
         await self._send(payload_end)
-        logger.info(f"[tx] greeting trigger sent OK")
+        logger.info("[tx] greeting trigger sent OK")
 
     async def _send_audio_start(self):
         await self._send({"event": {"contentStart": {

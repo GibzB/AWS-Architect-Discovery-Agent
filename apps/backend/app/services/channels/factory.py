@@ -28,21 +28,22 @@ class RecordingChannel(Channel):
 
     def send(self, recipient: str, message: OutboundMessage) -> SendResult:
         masked = mask_recipient(recipient)
+        body = self._actions_as_text(message)
         record = {
             "channel": self.name,
             "recipient_masked": masked,
             "subject": message.subject,
-            "text": self._actions_as_text(message),
+            "text": body,
             "actions": [a.id for a in message.actions],
             "reason": self.reason,
         }
         SANDBOX_OUTBOX.append(record)
-        log.info("[sandbox:%s] would send to %s: %r", self.name, masked, record["text"][:120])
+        log.info("[sandbox:%s] would send to %s: %r", self.name, masked, body[:120])
         return SendResult(self.name, masked, f"sandbox-{uuid.uuid4()}", sandbox=True, ok=True)
 
 
 # channel name -> (module, class, env var required for a real send)
-_REAL_ADAPTERS = {
+_REAL_ADAPTERS: dict[str, tuple[str, str, str]] = {
     "email": ("ses_adapter", "SesAdapter", "SES_SENDER_EMAIL"),
     "sms": ("sms_adapter", "SmsAdapter", "SMS_ORIGINATION_IDENTITY"),
     "rcs": ("rcs_adapter", "RcsAdapter", "SMS_ORIGINATION_IDENTITY"),

@@ -1,6 +1,7 @@
-"""In-memory session store — will be replaced by DynamoDB in Phase 3."""
+"""Session store — in-memory (dev) or DynamoDB (SESSION_BACKEND=dynamodb)."""
 
 import logging
+import os
 from typing import Any
 from datetime import datetime, timezone
 
@@ -119,11 +120,8 @@ class MemoryStore:
 #   otherwise                 -> in-memory (local dev / tests)
 # Both expose the identical interface.
 # ──────────────────────────────────────────────────────────────
-import os as _os
-
-
 def _make_store():
-    if _os.getenv("SESSION_BACKEND", "memory").lower() == "dynamodb":
+    if os.getenv("SESSION_BACKEND", "memory").lower() == "dynamodb":
         try:
             from app.services.dynamo_store import DynamoSessionStore
 
