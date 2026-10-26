@@ -1,0 +1,114 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: ASA Backend on EC2 Free Tier (WebSocket support)
+
+Parameters:
+  KeyName:
+    Type: String
+    Default: ''
+    Description: EC2 Key Pair (optional, leave empty for no SSH)
+  GitBranch:
+    Type: String
+    Default: feature/sprint-1-foundation
+
+Resources:
+  SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: ASA Backend
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+
+  InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: asa-backend-ec2-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonBedrockFullAccess
+        - arn:aws:iam::aws:policy/AmazonPollyFullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref InstanceRole
+
+  Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      ImageId: ami-083366ec0ea814e87  # Amazon Linux 2023 eu-west-1
+      IamInstanceProfile: !Ref InstanceProfile
+      SecurityGroups:
+        - !Ref SecurityGroup
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+          
+          # Install Python 3.12
+          dnf install -y python3.12 python3.12-pip git
+          
+          # Clone repo
+          cd /home/ec2-user
+          git clone -b ${GitBranch} https://github.com/GibzB/AWS-Architect-Discovery-Agent.git app
+          cd app
+          
+          # Setup backend
+          cd apps/backend
+          python3.12 -m venv .venv
+          source .venv/bin/activate
+          pip install fastapi 'uvicorn[standard]' pydantic boto3 python-dotenv httpx websockets aws-sdk-bedrock-runtime smithy-aws-core smithy-core awscrt botocore==1.42.78 boto3==1.42.78
+          
+          # Create systemd service
+          cat > /etc/systemd/system/asa.service << 'EOF2'
+          [Unit]
+          Description=ASA Discovery Backend
+          After=network.target
+          
+          [Service]
+          Type=simple
+          User=ec2-user
+          WorkingDirectory=/home/ec2-user/app/apps/backend
+          Environment=AWS_DEFAULT_REGION=eu-west-1
+          Environment=BEDROCK_MODEL_ID=eu.amazon.nova-pro-v1:0
+          ExecStart=/home/ec2-user/app/apps/backend/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+          Restart=always
+          
+          [Install]
+          WantedBy=multi-user.target
+          EOF2
+          
+          # Add project paths
+          echo 'import sys; sys.path.insert(0, "/home/ec2-user/app")' > /home/ec2-user/app/apps/backend/.venv/lib/python3.12/site-packages/asa_paths.pth
+          
+          chown -R ec2-user:ec2-user /home/ec2-user/app
+          systemctl daemon-reload
+          systemctl enable asa
+          systemctl start asa
+      Tags:
+        - Key: Name
+          Value: asa-backend
+
+Outputs:
+  PublicIP:
+    Description: Backend public IP
+    Value: !GetAtt Instance.PublicIp
+  BackendURL:
+    Description: Backend URL
+    Value: !Sub http://${Instance.PublicIp}:8000

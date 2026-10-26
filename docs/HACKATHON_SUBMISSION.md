@@ -1,114 +1,198 @@
-# Hackathon Submission — AWS Discovery Orchestrator
+# Hackathon Submission — Atlas: AI Solutions Architect
+
+## What is Atlas?
+
+Atlas is an autonomous AI Solutions Architect that conducts enterprise cloud discovery
+workshops through natural voice and chat conversations. It replaces weeks of manual
+pre-sales consulting with a guided, multi-agent dialogue that produces
+implementation-ready deliverables.
+
+**Atlas is not a chatbot.** It is an autonomous reasoning system that drives the
+conversation, plans dynamically, coordinates specialist agents, reflects on its own
+work, and produces complete architectural recommendations.
 
 ---
 
-## About the Project (Project Story)
+## Problem
 
-### Inspiration
+Enterprise cloud discovery workshops require:
+- Experienced Solutions Architects (scarce, expensive)
+- Multiple sessions spanning weeks
+- Manual documentation and architecture design
+- No automated validation against best practices
 
-As someone who works in the cloud solutions space, I've seen how the architecture discovery process is painfully slow. A solutions architect spends weeks scheduling meetings, interviewing stakeholders, researching services, and writing reports — all before a single resource is provisioned. I asked myself: what if an AI could conduct that entire discovery interview in real-time over voice, then instantly produce the report?
-
-The Azure Discovery Orchestrator project (which I previously built) proved the concept works — but it relied on multiple Azure services stitched together (Speech SDK for STT/TTS, OpenAI for reasoning, Cosmos DB, etc.). When I discovered Amazon Bedrock AgentCore and Nova 2 Sonic, I realized I could build something far simpler and more elegant: a single model that handles the entire voice conversation natively, running on a fully serverless runtime with zero infrastructure to manage.
-
-### What It Does
-
-The AWS Discovery Orchestrator is a voice-powered AI agent that conducts architecture discovery workshops with clients. A user opens the web app, clicks "Start Discovery Session," and has a natural voice conversation with an AI architect that:
-
-1. Asks structured questions about their business, technical needs, compliance requirements, and growth plans
-2. Adapts follow-up questions based on answers
-3. Generates a complete architecture recommendation report the moment the session ends
-
-A typical 12-minute conversation replaces 20-40 hours of senior architect work and produces a professional report instantly.
-
-### How I Built It
-
-**Architecture:**
-- **Amazon Nova 2 Sonic** handles the entire voice conversation — bidirectional audio streaming means no separate STT or TTS services needed
-- **Amazon Nova Pro** generates the post-session report (architecture recommendations, AWS service breakdown, cost estimates, next steps)
-- **Amazon Bedrock AgentCore Runtime** hosts the agent container serverlessly — scales to zero, no servers to manage
-- **AWS Lambda + API Gateway** generates SigV4 presigned WebSocket URLs for secure browser-to-agent connections
-- **Amazon DynamoDB** stores session transcripts and generated reports
-- **Amazon S3 + CloudFront** serves the frontend globally with HTTPS
-- **AWS CloudFormation** defines the entire infrastructure as code
-
-**Tech stack:**
-- Python 3.12 + FastAPI (agent backend)
-- Vanilla HTML/CSS/JS (frontend — intentionally lightweight)
-- Docker (ARM64 container for AgentCore)
-- Single deploy script that stands up everything in one command
-
-**Key design decision:** Instead of the multi-agent routing pattern (orchestrator → business agent → architect agent → security agent), I use Nova 2 Sonic's native conversational abilities with a comprehensive system prompt that covers all discovery phases. This eliminates inter-agent latency and produces a more natural conversation flow. Nova Pro then acts as the "report agent" post-session.
-
-### Challenges
-
-1. **AgentCore WebSocket proxy behavior** — The proxy only delivers server→client messages while handling a client frame. I had to implement a message queue pattern where Nova Sonic callbacks enqueue messages, and the main loop flushes them on each client frame.
-
-2. **Nova 2 Sonic bidirectional stream protocol** — The event-based protocol (contentStart/textInput/audioInput/contentEnd) requires precise sequencing. Getting the session start → system prompt → greeting trigger → audio block open sequence right took careful study of the SDK.
-
-3. **Transcript deduplication** — Nova Sonic sometimes echoes transcript events. I implemented a seen-set to suppress duplicates.
-
-4. **Cold starts** — AgentCore containers take 30-60 seconds on first invocation. I documented this clearly and recommend a warm-up call before demos.
-
-### What I Learned
-
-- Bedrock AgentCore Runtime is a genuinely zero-ops way to deploy AI agents — no ECS clusters, no auto-scaling configs, no load balancers
-- Nova 2 Sonic's native bidirectional voice eliminates an entire class of complexity (separate STT → LLM → TTS pipelines)
-- The SigV4 presigned URL pattern for WebSocket auth is elegant and avoids putting credentials in the frontend
-- CloudFormation custom resource types (`AWS::BedrockAgentCore::Runtime`) make IaC for new services straightforward
+**Cost:** $50,000–$150,000+ per engagement in billable hours.
 
 ---
 
-## Built With
+## Solution
 
-- Amazon Bedrock (Nova 2 Sonic, Nova Pro)
-- Amazon Bedrock AgentCore Runtime
-- AWS Lambda
-- Amazon API Gateway
-- Amazon DynamoDB
-- Amazon S3
-- Amazon CloudFront
-- AWS CloudFormation
-- AWS IAM
-- AWS WAF
-- Python
-- FastAPI
-- Docker
+Atlas conducts the entire workshop autonomously:
+
+1. **Discovery** — Asks adaptive questions to understand the business
+2. **Architecture** — Designs a complete AWS solution with justification
+3. **Review** — Validates against the Well-Architected Framework
+4. **Deliverables** — Produces reports, diagrams, and Terraform code
+
+Total time: **15–30 minutes** instead of weeks.
 
 ---
 
-## Links and Media
+## What Makes This Agentic
 
-- **Demo URL:** *(CloudFront URL after deployment)*
-- **GitHub / Repository URL:** https://github.com/GibzB/AWS-Architect-Discovery-Agent
+### Autonomous Reasoning Loop
+```
+Observe → Reason → Plan → Select Agent → Invoke Tools → Evaluate → Reflect → Repeat
+```
+
+### Multi-Agent Collaboration
+| Agent | Role |
+|-------|------|
+| Planner | Decides what happens next (never acts) |
+| Discovery | Identifies gaps, asks questions (never designs) |
+| Architect | Designs AWS solutions (never asks questions) |
+| Review | Validates and can reject (forces revision) |
+
+### Dynamic Planning
+- No hardcoded questionnaire
+- Questions adapt based on what's already known
+- Planner dynamically routes between agents
+
+### Reflection Loop
+- Review Agent can REJECT architecture
+- Rejection triggers the Architect to revise
+- Loop continues until validation passes
+- **This is the key differentiator** — the system validates its own output
+
+### Tool Registry
+Agents request capabilities through a registry:
+- Knowledge Base Search (RAG)
+- Diagram Generator (Mermaid)
+- Terraform Generator
+- Markdown Report Generator
 
 ---
 
-## Video Demo Link
+## Architecture
 
-*(Record a 2-3 minute demo showing: clicking Start → having a brief voice conversation → seeing the transcript appear live → ending session → seeing the report generate)*
+```
+┌──────────────────────────────────────────────────────┐
+│                   React + Tailwind                    │
+└───────────────────────┬──────────────────────────────┘
+                        │ REST + WebSocket
+┌───────────────────────▼──────────────────────────────┐
+│                     FastAPI                           │
+│  ┌─────────┐  ┌──────────┐  ┌──────────────────┐   │
+│  │  Atlas  │→ │  Planner │→ │  Agent Registry  │   │
+│  └─────────┘  └──────────┘  └────────┬─────────┘   │
+│                                       │             │
+│       ┌───────────┬──────────┬────────┘             │
+│       ▼           ▼          ▼                      │
+│  ┌──────────┐ ┌────────┐ ┌────────┐                │
+│  │Discovery │ │Architect│ │ Review │                │
+│  └──────────┘ └────────┘ └────────┘                │
+└──────────────────────────────────────────────────────┘
+          │              │              │
+    ┌─────▼─────┐ ┌─────▼─────┐ ┌─────▼─────┐
+    │  Bedrock  │ │ DynamoDB  │ │    S3     │
+    │ Nova Pro  │ │ (Sessions)│ │ (Reports) │
+    └───────────┘ └───────────┘ └───────────┘
+```
 
 ---
 
-## Technology Partner: AWS
+## AWS Services Used
 
-### How I Used AWS
+| Service | Purpose |
+|---------|---------|
+| Amazon Bedrock (Nova Pro) | LLM reasoning for all agents |
+| Amazon Bedrock (Nova Sonic) | Bidirectional voice |
+| Amazon Bedrock Knowledge Base | RAG over Well-Architected docs |
+| Amazon DynamoDB | Session memory persistence |
+| Amazon S3 | Report storage, frontend hosting |
+| Amazon Cognito | Authentication |
+| Amazon Polly | Text-to-Speech for voice mode |
+| Amazon CloudFront | Frontend CDN |
+| AWS Secrets Manager | API key storage |
 
-The entire application runs exclusively on AWS services with a fully serverless architecture:
+---
 
-**Amazon Bedrock — Nova 2 Sonic** is the core of the system. It powers the real-time bidirectional voice conversation between the user and the AI architect. The model receives a system prompt that structures the discovery interview into 5 phases (business context, technical workloads, compliance, growth, recommendation) and conducts the entire conversation via streaming audio — no separate speech-to-text or text-to-speech services needed.
+## Deliverables Produced
 
-**Amazon Bedrock — Nova Pro** generates the post-session discovery report. After the voice conversation ends, the full transcript is sent to Nova Pro with a report-generation prompt. It produces a structured Markdown document with architecture recommendations, AWS service breakdown with cost estimates, security considerations, and concrete next steps.
+1. ✅ Executive Summary
+2. ✅ Architecture Decisions (ADRs)
+3. ✅ AWS Service Mapping with justification
+4. ✅ Architecture Diagram (Mermaid)
+5. ✅ Well-Architected Review Scores
+6. ✅ Risk Register with mitigations
+7. ✅ Cost Estimate
+8. ✅ Terraform Code
+9. ✅ Markdown Report
+10. ✅ JSON API Output
 
-**Amazon Bedrock AgentCore Runtime** hosts the agent as a serverless container. It manages scaling (including scale-to-zero), WebSocket proxying with SigV4 authentication, health checks, and container lifecycle — all without any ECS/EKS/EC2 infrastructure. The container runs a FastAPI server that bridges the browser WebSocket to the Nova 2 Sonic bidirectional stream.
+---
 
-**AWS Lambda + Amazon API Gateway** provide the presign API. A single Lambda function generates SigV4-presigned WebSocket URLs that allow the browser to securely connect to AgentCore without exposing AWS credentials client-side.
+## Tech Stack
 
-**Amazon DynamoDB** persists session data — transcripts and generated reports — with on-demand billing (zero cost when idle).
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React + TypeScript + Tailwind CSS |
+| Backend | FastAPI (Python 3.10+) |
+| AI | Amazon Bedrock (Nova Pro, Nova Sonic, Polly) |
+| Database | Amazon DynamoDB |
+| Storage | Amazon S3 |
+| Auth | Amazon Cognito |
+| IaC | Terraform |
+| CI/CD | GitHub Actions |
 
-**Amazon S3 + Amazon CloudFront** serve the static frontend (HTML/JS/CSS) globally over HTTPS with Origin Access Control. A CloudFront Function handles optional HTTP Basic Auth for demo access.
+---
 
-**AWS WAF** (optional) adds rate limiting and AWS managed common rules for production protection.
+## Running Locally
 
-**AWS CloudFormation** defines the entire infrastructure as code in two templates, deployable with a single shell script.
+```bash
+# Backend
+cd apps/backend
+source .venv/bin/activate
+export AWS_PROFILE=K1-Kitstek-Billy
+uvicorn app.main:app --reload --port 8000
 
-The result is a system that costs $0.08-0.25 per discovery session, scales to zero when not in use, and requires zero operational maintenance.
+# Frontend
+cd apps/frontend
+npm run dev
+```
+
+Open http://localhost:5173
+
+---
+
+## Demo Scenario
+
+**Input:** "We're a healthcare SaaS company with 50,000 users. We require HIPAA compliance, 99.99% availability, and disaster recovery."
+
+**Atlas:**
+1. Conducts adaptive discovery (asks about PHI, encryption needs, RPO/RTO)
+2. Identifies compliance gaps
+3. Generates multi-region architecture with HIPAA-compliant services
+4. Review Agent rejects (single-region insufficient for stated RTO)
+5. Architect revises to multi-region
+6. Review approves
+7. Full report + Terraform + diagram generated
+
+**Duration:** ~3 minutes for complete end-to-end demonstration.
+
+---
+
+## What's Next
+
+- Full Nova Sonic bidirectional voice (requires Python 3.12+ runtime)
+- Step Functions orchestration for production workloads
+- EventBridge for async agent events
+- Bedrock Knowledge Base with AWS reference architectures
+- PDF report generation
+- Multi-cloud architecture support
+
+---
+
+## Team
+
+Built with ❤️ using Amazon Bedrock, AgentCore patterns, and autonomous AI principles.
